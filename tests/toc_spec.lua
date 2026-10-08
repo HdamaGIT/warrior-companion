@@ -46,6 +46,10 @@ local addons = {
         savedVariables = "WarriorWorkshopDB",
         savedVariablesPerCharacter = "WarriorWorkshopCharDB",
     },
+    {
+        dir = "WarriorWorkshopProbe",
+        savedVariables = "WarriorWorkshopProbeDB",
+    },
 }
 
 for _, addon in ipairs(addons) do

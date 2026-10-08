@@ -1,0 +1,9 @@
+## Interface: 120105
+# TODO [VERIFY V-01]: confirm with /dump select(4, GetBuildInfo()) and record as D-005.
+## Title: Warrior Workshop Probe
+## Notes: Phase 0 throwaway API probe for Warrior Workshop. Disable after use.
+## Author: Hugh
+## Version: 0.1.0
+## SavedVariables: WarriorWorkshopProbeDB
+
+Probe.lua
