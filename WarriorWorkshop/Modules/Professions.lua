@@ -1,0 +1,1 @@
+-- Placeholder: implemented in M4 (Professions). Not listed in WarriorWorkshop.toc yet (D-010).
