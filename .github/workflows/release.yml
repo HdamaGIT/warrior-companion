@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stamp version into the .toc
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i "s/^## Version: .*/## Version: ${VERSION}/" WarriorWorkshop/WarriorWorkshop.toc
+          grep '^## Version:' WarriorWorkshop/WarriorWorkshop.toc
+
+      - name: Zip add-on
+        # The zip keeps the top-level WarriorWorkshop/ folder so it extracts
+        # straight into Interface/AddOns/. The probe is never released.
+        run: zip -r "WarriorWorkshop-${GITHUB_REF_NAME}.zip" WarriorWorkshop -x "*.gitkeep"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: WarriorWorkshop-${{ github.ref_name }}.zip
