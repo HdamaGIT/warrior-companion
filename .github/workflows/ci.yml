@@ -32,6 +32,7 @@ jobs:
             sed -E 's/^([^:]+):([0-9]+):([0-9]+): (.*)$/::error file=\1,line=\2,col=\3::\4/' luacheck.out
             exit 1
           }
+          echo "::notice title=luacheck::$(luacheck . --formatter=default --no-color | tail -n 1)"
 
       - name: busted
         run: |
@@ -40,3 +41,4 @@ jobs:
             grep -A8 '^not ok' busted.out | sed 's/^/::error::/'
             exit 1
           }
+          echo "::notice title=busted::ok=$(grep -c '^ok' busted.out) not_ok=$(grep -c '^not ok' busted.out) $(grep -c '# SKIP' busted.out) pending"
