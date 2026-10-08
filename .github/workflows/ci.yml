@@ -8,7 +8,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Lua 5.1 (WoW runtime)
         uses: leafo/gh-actions-lua@v10
@@ -24,7 +24,19 @@ jobs:
           luarocks install busted
 
       - name: luacheck
-        run: luacheck .
+        # Findings are also emitted as workflow annotations so they are visible
+        # without downloading logs.
+        run: |
+          set -o pipefail
+          luacheck . --formatter=plain --codes | tee luacheck.out || {
+            sed -E 's/^([^:]+):([0-9]+):([0-9]+): (.*)$/::error file=\1,line=\2,col=\3::\4/' luacheck.out
+            exit 1
+          }
 
       - name: busted
-        run: busted
+        run: |
+          set -o pipefail
+          busted -o TAP | tee busted.out || {
+            grep -A8 '^not ok' busted.out | sed 's/^/::error::/'
+            exit 1
+          }

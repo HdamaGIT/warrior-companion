@@ -1,1 +1,2 @@
--- Placeholder: UI/Widgets.lua is implemented in M6 (UI shell + Planner tab). Not listed in WarriorWorkshop.toc yet (D-010).
+-- Placeholder: UI/Widgets.lua is implemented in M6 (UI shell + Planner tab).
+-- Not listed in WarriorWorkshop.toc yet (D-010).

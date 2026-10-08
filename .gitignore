@@ -16,3 +16,5 @@ dist/
 # OS
 Thumbs.db
 .DS_Store
+luacheck.out
+busted.out
