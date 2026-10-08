@@ -1,0 +1,13 @@
+## Interface: 120105
+# TODO [VERIFY V-01]: confirm with /dump select(4, GetBuildInfo()) in the Forever client and record as D-005.
+## Title: Warrior Workshop
+## Notes: Cheapest next step to get stronger and level your professions. Warrior-focused.
+## Author: Hugh
+## Version: 0.0.1
+## SavedVariables: WarriorWorkshopDB
+## SavedVariablesPerCharacter: WarriorWorkshopCharDB
+
+# Load order: Locale -> Core -> Modules -> UI
+Locale\enUS.lua
+Core\Adapter.lua
+Core\Init.lua
