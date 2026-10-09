@@ -19,9 +19,65 @@ describe("migrations", function()
         order = {}
     end)
 
-    it("starts with empty lists because schema v1 is created from defaults", function()
-        assert.are.same({}, Migrations.ACCOUNT)
-        assert.are.same({}, Migrations.CHARACTER)
+    it("has exactly the v2 migration in each list", function()
+        assert.are.equal(1, #Migrations.ACCOUNT)
+        assert.are.equal(2, Migrations.ACCOUNT[1].to)
+        assert.are.equal(1, #Migrations.CHARACTER)
+        assert.are.equal(2, Migrations.CHARACTER[1].to)
+    end)
+
+    describe("AccountV2", function()
+        it("renames hideInCombat to hideMainInCombat, keeping the value", function()
+            local db = { schemaVersion = 1, settings = { hideInCombat = false, batchSize = 9 } }
+            Migrations.AccountV2(db)
+            assert.is_false(db.settings.hideMainInCombat)
+            assert.is_nil(db.settings.hideInCombat)
+            assert.are.equal(9, db.settings.batchSize)
+        end)
+
+        it("does not overwrite an existing hideMainInCombat", function()
+            local db = { settings = { hideInCombat = false, hideMainInCombat = true } }
+            Migrations.AccountV2(db)
+            assert.is_true(db.settings.hideMainInCombat)
+            assert.is_nil(db.settings.hideInCombat)
+        end)
+
+        it("tolerates missing settings", function()
+            assert.has_no.errors(function()
+                Migrations.AccountV2({})
+                Migrations.AccountV2({ settings = "junk" })
+            end)
+        end)
+    end)
+
+    describe("CharacterV2", function()
+        it("moves the v1 gear profiles to advisor", function()
+            local profiles = { dps = { weights = { str = 2 } } }
+            local db = { gear = { activeProfile = "tank", profiles = profiles } }
+            Migrations.CharacterV2(db)
+            assert.are.equal("tank", db.advisor.activeProfile)
+            assert.are.equal(profiles, db.advisor.profiles)
+            assert.is_nil(db.gear)
+        end)
+
+        it("keeps old gear under advisor.legacyGear if advisor already exists", function()
+            local old = { activeProfile = "dps", profiles = {} }
+            local db = { gear = old, advisor = { activeProfile = "tank" } }
+            Migrations.CharacterV2(db)
+            assert.are.equal(old, db.advisor.legacyGear)
+            assert.are.equal("tank", db.advisor.activeProfile)
+        end)
+
+        it("leaves a v2-shaped gear table and missing gear alone", function()
+            local sets = { sets = { [1] = { setID = 3 } } }
+            local db = { gear = sets }
+            Migrations.CharacterV2(db)
+            assert.are.equal(sets, db.gear)
+            assert.is_nil(db.advisor)
+            assert.has_no.errors(function()
+                Migrations.CharacterV2({})
+            end)
+        end)
     end)
 
     it("applies every migration above the current version, in order", function()

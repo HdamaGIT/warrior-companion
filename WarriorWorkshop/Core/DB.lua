@@ -8,9 +8,9 @@ local Migrations = ns.Migrations
 local DB = {}
 ns.DB = DB
 
-DB.SCHEMA_VERSION = 1
+DB.SCHEMA_VERSION = 2
 
--- Placeholder weights (SPEC 7.6). Not shipped as truth: the user edits them.
+-- Placeholder weights (SPEC v0.1 §7.6, carried into SPEC_V2 §10.4). Not shipped as truth: the user edits them.
 local function dpsWeights()
     return {
         str = 1.00, agi = 0.70, sta = 0.10, ap = 0.50, crit = 0.80, hit = 1.00, haste = 0.60, expertise = 0.80,
@@ -27,7 +27,7 @@ local function tankWeights()
     }
 end
 
---- Returns a fresh copy of the account-wide defaults (SPEC 6, plus settings.planner per D-014).
+--- Returns a fresh copy of the account-wide defaults (SPEC_V2 §6; batchSize and planner kept per D-014, D-029).
 -- @return table
 function DB.GetAccountDefaults()
     return {
@@ -35,8 +35,8 @@ function DB.GetAccountDefaults()
         settings = {
             debug = false,
             batchSize = 5,
-            hideInCombat = true,
-            window = { point = "CENTER", x = 0, y = 0, w = 640, h = 480, tab = "planner" },
+            hideMainInCombat = true,
+            window = { point = "CENTER", x = 0, y = 0, w = 640, h = 480, tab = "alerts" },
             planner = {
                 calibrationMinAttempts = 30,
                 defaultOdds = { optimal = 1.00, medium = 0.75, easy = 0.25, trivial = 0.00 },
@@ -54,18 +54,48 @@ function DB.GetAccountDefaults()
     }
 end
 
---- Returns a fresh copy of the per-character defaults (SPEC 6).
+--- Returns a fresh copy of the per-character defaults (SPEC_V2 §6). HUD positions are placeholder assumptions
+-- (moved with /ww unlock in M5). Rule and announce settings are sparse overrides; their defaults live in code.
 -- @return table
 function DB.GetCharacterDefaults()
     return {
         schemaVersion = DB.SCHEMA_VERSION,
         meta = {},
+        combat = {
+            enabled = true,
+            hud = {
+                locked = true,
+                alertStrip = { point = "CENTER", x = 0, y = -150, scale = 1.0, maxIcons = 6 },
+                bigAlert = { point = "CENTER", x = 0, y = 120, scale = 1.5 },
+                combatText = { point = "CENTER", x = 0, y = 40, scale = 1.0,
+                    show = { parry = true, dodge = true, block = true, crit = false } },
+                badges = { point = "CENTER", x = 0, y = -200 },
+            },
+            alertStyle = {
+                expiring = { size = 64, flash = false },
+                dropped = { size = 128, flash = true, sound = "RAID_WARNING" },
+                reactive = { size = 48, glow = true },
+            },
+            ruleOverrides = {},
+            spellOverrides = {},
+        },
+        announce = {
+            enabled = true,
+            throttle = { default = 2.0, avoidance = 5.0 },
+            events = {},
+        },
+        gear = {
+            sets = {},
+            weaponSwaps = {},
+            macros = {},
+        },
+        -- Phase E (Workshop)
         inventory = { bags = {}, bank = {} },
         professions = {},
         targets = {},
         craftLog = {},
         colourObservations = {},
-        gear = {
+        advisor = {
             activeProfile = "dps",
             profiles = {
                 dps = { label = "DPS", weights = dpsWeights() },
