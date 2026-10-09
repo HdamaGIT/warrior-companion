@@ -1,66 +1,61 @@
-# Handoff: 2026-10-08: M0 scaffold and M1 probe
+# Handoff: 2026-10-09: M2 Core
 
 ## Session goal
-Build M0 (Scaffold) and M1 (Probe) from SPEC §11, get CI green, then stop for Hugh's in-game checks.
+Build M2 (Core) from SPEC §11 ahead of the M1 probe run, at Hugh's explicit request: Init, event bus, DB with defaults, migrations, Log, Util, and the Adapter skeleton.
 
 ## Outcome
-**Achieved, pending human checks.** Both milestones are built and CI is green. M0 needs the in-game load test (`docs/verification/M0.md`). M1 needs the probe run in the beta **before 21 Oct 2026** (`docs/verification/M1.md`, `docs/PROBE_RESULTS.md`). M2 has not been started and needs explicit approval.
+**Achieved, pending human check.** M2 is built, luacheck is clean and busted is green on CI. The in-game check is `docs/verification/M2.md` ("reload persists settings"). **M0 and M1 in-game checks are still outstanding**, and the Adapter beyond M0's three functions is an **unverified skeleton** (D-015) until `docs/PROBE_RESULTS.md` is filled in. M3 has not been started and needs explicit approval.
 
 ## What was read
-`CLAUDE.md`, `docs/SPEC.md` (in full), and the PyCharm sample `main.py` (removed).
+`CLAUDE.md`, SPEC §5, §6, §7.5 to §7.9, §8, `docs/DECISIONS.md`, the previous handoff, `.luacheckrc`, `.busted`, `.github/workflows/ci.yml`, `tests/toc_spec.lua` and every file under `WarriorWorkshop/`.
 
 ## What was changed
-- `docs/SPEC.md`: moved from the repo root, where the spec expects it. Content unchanged.
-- `main.py`: deleted (PyCharm sample). `.idea/` is ignored.
-- `LICENSE`, `.gitignore`, `.editorconfig`, `.gitattributes` (LF in the repo, because `core.autocrlf=true` locally).
-- `.luacheckrc`: Lua 5.1 std. WoW globals (`stds.wow`) are allowed only for `Core/Adapter.lua`, `Core/Init.lua`, `UI/*.lua` and the probe. The only global writes allowed are the SavedVariables and slash globals.
-- `.busted`: runs `tests/*_spec.lua`.
-- `.github/workflows/ci.yml`: Lua 5.1.5 with LuaRocks, then luacheck and busted. Failures and totals are emitted as **annotations**, because job logs aren't readable without auth but annotations are public via the API.
-- `.github/workflows/release.yml`: on tag `v*`, stamps `## Version:` from the tag, zips `WarriorWorkshop/` and attaches the zip to a GitHub release.
-- `WarriorWorkshop/WarriorWorkshop.toc`: Interface 120105 (`TODO [VERIFY V-01]`), both SavedVariables; loads `Locale/enUS.lua`, `Core/Adapter.lua`, `Core/Init.lua`.
-- `WarriorWorkshop/Core/Adapter.lua`: minimal `Print`, `GetBuildInfo`, `GetAddOnVersion` (D-006).
-- `WarriorWorkshop/Core/Init.lua`: `/ww version`; any other `/ww …` prints "not available yet".
-- `WarriorWorkshop/Locale/enUS.lua`: strings.
-- Placeholders (comment-only, not in the `.toc`, D-010): `Core/{Events,DB,Migrations,Log,Util}.lua`, `Modules/*.lua`, `UI/*.lua`, `tests/{planner,gear,readiness,migrations,util}_spec.lua` (pending), `tests/helpers/mock_adapter.lua`, `tests/fixtures/.gitkeep`, `tools/analysis/README.md`.
-- `tests/toc_spec.lua`: checks the Lua 5.1 runtime, and for both `.toc` files checks the Interface line, the SavedVariables, and that every listed file exists.
-- `WarriorWorkshopProbe/`: the probe per SPEC §9, plus `gear`, `bags`, `rec` and `clear` subcommands and a compact all-recipes view. The secret-safety design is in D-007, D-008 and D-009.
-- `docs/DECISIONS.md` (D-001..D-010), `docs/DEV_SETUP.md`, `docs/PROBE_RESULTS.md` (template and encounter script), `docs/verification/M0.md`, `docs/verification/M1.md`, `README.md`.
+- `WarriorWorkshop/Core/Util.lua`: `DeepCopy`, `MergeDefaults`, `RingPush`, `Trim`, `Split`, `FormatMoney` (pure).
+- `WarriorWorkshop/Core/Log.lua`: `Debug`, `WarnOnce`, `IsDebug`, `SetDebug`, `ToggleDebug`. Output via `ns.Adapter.Print`; flag in `settings.debug`.
+- `WarriorWorkshop/Core/Adapter.lua`: full SPEC §5.3 surface plus `Time`, `Now`, `After`, `CreateEventFrame`, `GetPlayerMeta`, and the pure `NormaliseStats` with the `STAT_KEYS` table. Every API is existence-checked, wrapped in `pcall`, returns `nil` and warns once on failure, and is tagged `[VERIFY V-0x]`. The header says there are no probe findings.
+- `WarriorWorkshop/Core/Events.lua`: `On`, `Off`, `Fire`, `Dispatch`, `Debounce`. Lazy raw-event registration, `pcall` isolation, snapshot dispatch.
+- `WarriorWorkshop/Core/Migrations.lua`: `ACCOUNT` and `CHARACTER` lists (both empty at v1) and pure `Apply(db, migrations, target)`.
+- `WarriorWorkshop/Core/DB.lua`: `GetAccountDefaults`, `GetCharacterDefaults`, pure `Prepare`, `Init`, accessors, `UpdateMeta`, `StampLastSeen`. No globals touched.
+- `WarriorWorkshop/Core/Init.lua`: `ns:NewModule`, `ns:GetModule`, ADDON_LOADED / PLAYER_LOGIN / PLAYER_LOGOUT lifecycle, `/ww version` (real schema) and `/ww debug`.
+- `WarriorWorkshop/Locale/enUS.lua`: new strings. `WarriorWorkshop.toc`: Locale, Util, Log, Adapter, Events, Migrations, DB, Init.
+- `.luacheckrc`: extra read-only WoW names for the Adapter (`C_Timer`, unit and inventory APIs); Init may also write the two SavedVariables.
+- Tests: `util`, `migrations`, `db`, `events`, `log`, `adapter`, `init` (incl. the no-globals-leak test) specs; real `tests/helpers/mock_adapter.lua` (fake frame, manual timer) and `tests/helpers/load_addon.lua`; fixtures `item_stats.lua`, `saved_account.lua`; `toc_spec.lua` also checks the Core load order.
+- Docs: D-012 to D-015, `docs/verification/M2.md`, README status. `docs/verification/M0.md` step 4 wording updated (schema is now `1`).
+- `.github/workflows/ci.yml`: fixed a raw newline in the simulator notice step that made the whole workflow invalid (GitHub ran zero jobs). That step came from the simulator commit, not from M2.
 
 ## Verification state (pasted, not recalled)
-No Lua toolchain is installed locally (no Lua, LuaRocks, WSL or Docker), so **CI is the verifier**. CI run 37848304667 on commit `1adb690`, annotations fetched via the GitHub API:
+No local Lua toolchain, so **CI is the verifier**. CI run **37879401020** on commit `1563571`, annotations fetched via the GitHub API:
 ```
 conclusion: success
-luacheck: Total: 0 warnings / 0 errors in 27 files
-busted:   ok=12 not_ok=0 5 pending      (7 real tests + 5 pending placeholders)
+luacheck:  Total: 0 warnings / 0 errors in 41 files
+busted:    ok=119 not_ok=0 3 pending   (3 pending = planner, gear, readiness placeholders)
+simulator: Ran 26 tests in 0.036s OK
 ```
-The first CI run (`93ed564`) failed luacheck: three placeholder comment lines were over 120 characters. This was fixed in `5ba2774`.
+The first M2 run (`afc5d15`) was also green (busted 119 ok, luacheck 0/0 in 35 files). Run 37879357085 failed only because of the invalid `ci.yml` described above.
 
 ## Git state
-Branch `main`, pushed to `origin/main`. Everything is committed apart from this handoff commit. Next session: work on `main` (solo project, per SPEC §12).
+Branch `main`, pushed to `origin/main`. `docs/SPEC_LEVELING.md` is staged in the index (`AM`) by something outside this session and was deliberately left out of every commit. `tools/sim/` was committed by the simulator work (b55ce19, b344f2a), also not by this session.
 
-## Decisions made
-D-006 to D-010 in `docs/DECISIONS.md`: minimal Adapter in M0; probe stores values only when confirmed non-secret; `pcall` around event registration and player-only unit events; addon prefix registration and the extra chat channels; placeholders kept out of the `.toc`. D-005 (interface and folder) waits for Hugh's numbers.
+## Decisions
+D-012 backup inside the SavedVariables table; D-013 event frame and timer come from the Adapter; D-014 planner odds settings in schema v1; D-015 M2 built before the probe, Adapter is unverified. (The plan named these D-011 to D-014; D-011 was taken by the simulator decision, so they were shifted by one.)
 
 **Assumptions:**
-- The probe initialises on `PLAYER_LOGIN`, not `ADDON_LOADED`, so it never compares an event argument. Events before `PLAYER_LOGIN` aren't recorded.
-- The secret-API names beyond `issecretvalue` are guesses; the probe only checks whether they exist.
-- The licence holder is "Hugh".
+- `settings.window` defaults to `CENTER`, 0, 0, 640x480, tab `planner` (SPEC lists only the field names).
+- An empty saved table is treated as first run; a non-empty table without a numeric `schemaVersion` is corrupt and is backed up.
+- Migrations are split into `ACCOUNT` and `CHARACTER` lists, because the two tables version independently.
+- `Events:Debounce` is trailing-edge from the first call (no restart on later calls), and later calls replace the stored function.
+- Bag IDs `0..5`, bank IDs `-1, 6..12`, equipment slots `1..19` are guesses. The bank is treated as closed when its containers report zero slots.
+- `ITEM_MOD_*` table lists both `_SHORT` and bare spellings; armour is read from `RESISTANCE0_NAME`; `weaponSpeed` has no mapping yet.
+- `Adapter.IsUsableByPlayer` uses `C_Item.IsUsableItem`, which may mean "has a use effect" rather than "equippable". Revisit with V-06.
 
 ## Open items / known issues
-**Flagged spec issues for later milestones (not decided yet):**
-- **M2:** SPEC §6 backs up corrupt data to `WarriorWorkshopDB_backup`. That is a new global, and it would not persist because it isn't declared in the `.toc`. Proposal: store the backup inside `WarriorWorkshopDB`.
-- **M2:** `Core/Events.lua` needs `CreateFrame`, but luacheck only whitelists Adapter, Init and UI. Proposal: the Adapter provides the event frame.
-- **M6/M8:** SPEC §7.9 uses `/ww ready` for both "open the Ready tab" and "chat summary". Needs one meaning.
-- **M5:** SPEC §7.5 says the odds threshold and defaults "live in settings", but they are missing from the §6 schema.
-- **M3:** Midnight bank tabs may have replaced bank bags and `PLAYERBANKSLOTS_CHANGED`. `/wwprobe bags` at the bank and the `registrations` results will settle this.
-
-**Other notes:**
-- The `leafo/gh-actions-*` actions target Node 20; GitHub warns but still runs them. `ubuntu-latest` moves to Ubuntu 26 from 19 Oct 2026. Watch CI around then.
-- The `.toc` `## Version:` is hard-coded at 0.0.1; the release workflow overwrites it from the tag.
-- The probe is untested in a real client. Expect a fix-up round if the first `/wwprobe` errors. Paste the error text.
+- M0 and M1 in-game checks, and filling `docs/PROBE_RESULTS.md`, are outstanding. Once the results arrive, revise the Adapter (all `[VERIFY]` tags) and record D-005.
+- Warnings like `API unavailable: ...` in chat at the first M2 login are expected findings, not bugs. Paste them back.
+- Carried from before: `/ww ready` has two meanings in SPEC §7.9 (M6/M8); the Midnight bank layout may differ (M3); the `leafo/gh-actions-*` Node 20 deprecation and the `ubuntu-latest` move on 19 Oct 2026.
+- Idea (not built): flag gear profiles as `placeholder = true` so the UI can label them until edited.
 
 ## Progress doc position
-No PROGRESS or STATUS doc exists; the status table in `README.md` is the progress view (M0 and M1 built, awaiting checks).
+No PROGRESS or STATUS doc exists; the `README.md` status table is the progress view (M0 and M1 built, M2 built, all awaiting in-game checks).
 
 ## Suggested next prompt
-> Read CLAUDE.md, docs/HANDOFF.md, docs/DECISIONS.md and docs/PROBE_RESULTS.md. Here are my M0 checklist results and my WarriorWorkshopProbe.lua SavedVariables: <paste>. Fill in docs/PROBE_RESULTS.md (V-01..V-10), record D-005 and any new decisions, fix the `## Interface:` lines if needed, and update the handoff. Don't start M2 until I approve it.
+> Read CLAUDE.md, docs/HANDOFF.md, docs/DECISIONS.md and docs/PROBE_RESULTS.md. Here are my M2 checklist results (and any M0/M1 results and probe SavedVariables): <paste>. Fix anything M2 turned up, fill in docs/PROBE_RESULTS.md, and revise the Adapter `[VERIFY]` functions against it, recording decisions. Don't start M3 until I approve it.
