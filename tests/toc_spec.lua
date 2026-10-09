@@ -75,3 +75,13 @@ for _, addon in ipairs(addons) do
         end)
     end)
 end
+
+describe("WarriorWorkshop.toc load order", function()
+    it("lists the Core files first, in the order the test helpers load them", function()
+        local helpers = dofile("tests/helpers/load_addon.lua")
+        local toc = parseToc("WarriorWorkshop/WarriorWorkshop.toc")
+        for index, relPath in ipairs(helpers.CORE_FILES) do
+            assert.are.equal(relPath, toc.files[index])
+        end
+    end)
+end)
