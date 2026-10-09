@@ -1,3 +1,5 @@
+> **Superseded by `docs/SPEC_V2.md` (9 Oct 2026); kept for reference.**
+
 # Warrior Workshop — Specification and Build Plan
 
 | | |
