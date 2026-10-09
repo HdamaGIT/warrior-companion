@@ -1,7 +1,7 @@
 # Probe results
 
-**Status:** template, not yet run. Probe version 2 (M1 + M3).
-**Client build:** ______ **Interface:** ______ **Client folder:** ______ **Date run:** ______
+**Status:** run 1 done (9 Oct, solo, partial). Probe version 3 ready for run 2.
+**Client build:** 1.60.1.70291 (7 Oct 2026) **Interface:** 16001 **Client folder:** `_classic_beta_` **Date run:** 9 Oct 2026
 
 Hugh runs the probe and pastes `WarriorWorkshopProbe.lua` from SavedVariables; Claude then fills in each section below. Every "Decision" either cites a `D-` entry in `docs/DECISIONS.md` or says "none needed". The step-by-step beta procedure is `docs/BETA_TESTING.md`.
 
@@ -9,8 +9,33 @@ Where to look in the dump: `static` = `/wwprobe`; `prof` = `/wwprobe prof`; `ite
 
 ---
 
+## Run 1 (9 October 2026, solo, open world only)
+
+Collected with `python tools/wowdev.py collect` into `beta-results/2026-10-09_205020/` (git-ignored). Probe version 2, 6 sessions, characters Sphere (level 8) and Kagoroar (level 1), both warriors. No `handlerErrors`. Not yet captured: combat sampler (no samples; see below), chat, key binding, swap button, macro, tank, trainer, any group or instance context.
+
+| Item | Result | Evidence |
+|---|---|---|
+| **V-01** | Interface **16001**, version 1.60.1, build 70291 (7 Oct 2026). Client folder `_classic_beta_` (product `wow_classic_beta`). | `static.buildInfo`; `/dump` by Hugh; D-005 |
+| M0/M2 | Add-on loads, `/ww version` shows schema 2, debug setting persists across `/reload`, `meta` correct for both characters, no `_backup`. Context prints `openWorld, solo, restricted=false, combat=true` in combat. | collected `WarriorWorkshop.lua` files; Hugh |
+| **V-10** | All secret APIs exist: `issecretvalue`, `issecrettable`, `canaccessvalue`, `canaccesstable`, `canaccessallvalues`, `hasanysecretvalues`, `scrubsecretvalues`. `C_Secrets` has 27 `Should*BeSecret` functions. | `static.secretApis`, `static.namespaces.C_Secrets` |
+| **V-16** | **`CombatLogGetCurrentEventInfo` does not exist.** CLEU registered without error but never fired. CLEU is not usable by add-ons in this client. | `static.functions`, `eventCounts`, `cleu.seen = 0` |
+| V-16 fallback | **`UNIT_COMBAT` works in open-world combat** for `player` and `target`: action (`WOUND`, `MISS`), flag text (`CRITICAL`, `GLANCING`), amount; all **non-secret**, including while the combat restriction is active. No DODGE/PARRY/BLOCK seen yet (only 2 fights). | `events` UNIT_COMBAT@player,target, `unitCombat` |
+| **V-21** | `C_RestrictedActions` exists (`CheckAllowProtectedFunctions`, `GetAddOnRestrictionState`, `IsAddOnRestrictionActive`). `ADDON_RESTRICTION_STATE_CHANGED` fires with `(0, 1)` exactly at `PLAYER_REGEN_DISABLED` and `(0, 0)` at `PLAYER_REGEN_ENABLED`, **in the open world**. Restriction type 0 therefore tracks combat; what it restricts is not yet known (event arguments stayed readable). | `events`, `static.namespaces` |
+| V-07 (open world) | Own `UNIT_SPELLCAST_SUCCEEDED` spellID readable during restricted combat (Charge 100, Rend 772). Encounters not tested. | `events` |
+| **V-22** (partial) | Spell IDs are the Classic ones (Heroic Strike 78, Battle Stance 2457, Charge 100, Rend 772). `C_Spell.GetSpellInfo(name)` resolves only spells the character knows (level 1: Heroic Strike, Battle Stance) and not "Auto Attack". One stance at level 1. `LEARNED_SPELL_IN_TAB` is an **unknown event**; `LEARNED_SPELL_IN_SKILL_LINE` registers. | `spells`, `registrations` |
+| **V-05 / V-27** (out of combat) | `C_EquipmentSet` complete (23 functions); `UseEquipmentSet` works out of combat (applied set "test2", which had 0 items saved, so 4 slots were emptied, which is correct). **Set IDs start at 0.** | `sets` |
+| V-19 (out of combat) | Nameplate level, classification, reaction, canAttack readable; threat `nil` out of combat. | `nameplates` |
+| V-31 (partial) | `C_CooldownViewer` (7 functions) and `C_DamageMeter` (8) exist: Blizzard's Cooldown Manager and damage meter are present. | `static.namespaces` |
+| V-04 note | Global `GetItemStats` is missing; `C_Item.GetItemStats` exists. `GetNumSpellTabs`/`GetSpellTabInfo` and `UnitDefense` are missing. | `static.functions` |
+| Extras | Weapon skills exist (`CHAT_MSG_SKILL`: "Your skill in Two-Handed Axes has increased to 2"). Classic-only container/tradeskill globals are absent (Mainline API confirmed). | `events`, `static.classicGlobals` |
+
+**Problems found in the probe (fixed in probe version 3):**
+- The "blocked from an action only available to the Blizzard UI" popup was not recorded: the probe ignored every event before `PLAYER_LOGIN`. Version 3 keeps them in `earlyEvents`. The likely cause is the probe registering `COMBAT_LOG_EVENT_UNFILTERED`; version 3 skips that registration when `CombatLogGetCurrentEventInfo` is missing. **Confirm:** the popup should no longer appear at login.
+- The combat sampler took no samples although it was switched on. Either it was turned on after the two fights, or the ticker did not start (version 3 records whether `C_Timer.NewTicker` exists). Re-run Stage 4.
+- Version 3 also samples `C_RestrictedActions` states 0–5 and ten `C_Secrets.Should*BeSecret` answers in combat, and dumps any `Enum.*Restriction*`/`*Secret*` enums.
+
 ## V-01 Interface number and client folder
-- **Result:**
+- **Result:** 16001; `_classic_beta_` (run 1).
 - **Evidence:** `static.buildInfo.returns[4]`; folder name from Hugh.
 - **Decision:** D-005. Update `## Interface:` in both `.toc` files.
 
