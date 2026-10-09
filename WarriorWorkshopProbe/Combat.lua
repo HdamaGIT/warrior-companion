@@ -97,6 +97,31 @@ for index = 1, 4 do
         "Battle Shout", "HELPFUL", subfields = AURA_FIELDS }
 end
 
+-- Restriction state (V-21). Found in the 9 Oct run: ADDON_RESTRICTION_STATE_CHANGED fires (type 0 -> state 1)
+-- exactly at PLAYER_REGEN_DISABLED in the open world. Argument shapes below are guesses; errors are findings.
+FIELDS[#FIELDS + 1] = { "secretRestrictions", "C_Secrets.HasSecretRestrictions" }
+for restrictionType = 0, 5 do
+    FIELDS[#FIELDS + 1] = { "restrictionState:" .. restrictionType, "C_RestrictedActions.GetAddOnRestrictionState",
+        restrictionType }
+    FIELDS[#FIELDS + 1] = { "restrictionActive:" .. restrictionType, "C_RestrictedActions.IsAddOnRestrictionActive",
+        restrictionType }
+end
+-- What the client says will be secret right now (each answers a V-item directly if it works).
+for _, spec in ipairs({
+    { "secrecy:unitHealthMax:target", "C_Secrets.ShouldUnitHealthMaxBeSecret", "target" },
+    { "secrecy:unitPower:player", "C_Secrets.ShouldUnitPowerBeSecret", "player" },
+    { "secrecy:unitStats:player", "C_Secrets.ShouldUnitStatsBeSecret", "player" },
+    { "secrecy:unitSpellCasting:target", "C_Secrets.ShouldUnitSpellCastingBeSecret", "target" },
+    { "secrecy:unitIdentity:target", "C_Secrets.ShouldUnitIdentityBeSecret", "target" },
+    { "secrecy:unitThreatState:target", "C_Secrets.ShouldUnitThreatStateBeSecret", "target" },
+    { "secrecy:cooldowns", "C_Secrets.ShouldCooldownsBeSecret" },
+    { "secrecy:auras", "C_Secrets.ShouldAurasBeSecret" },
+    { "secrecy:spellCooldown:Charge", "C_Secrets.ShouldSpellCooldownBeSecret", "Charge" },
+    { "secrecy:spellAura:Battle Shout", "C_Secrets.ShouldSpellAuraBeSecret", "Battle Shout" },
+}) do
+    FIELDS[#FIELDS + 1] = spec
+end
+
 -- Arguments of a field spec (array positions 3+), without trailing nils.
 local function fieldArgs(field)
     return unpack(field, 3, #field)
@@ -360,7 +385,13 @@ local function onCombatLog()
     end
 end
 
-ns.Listen("COMBAT_LOG_EVENT_UNFILTERED", { mode = "count", handler = onCombatLog })
+-- Registered only when the info function exists: the 9 Oct beta run found it missing, and registering CLEU
+-- anyway is the likely cause of a "blocked from an action only available to the Blizzard UI" popup at load.
+if type(resolve("CombatLogGetCurrentEventInfo")) == "function" then
+    ns.Listen("COMBAT_LOG_EVENT_UNFILTERED", { mode = "count", handler = onCombatLog })
+else
+    ns.registrations.COMBAT_LOG_EVENT_UNFILTERED = "skipped: CombatLogGetCurrentEventInfo missing"
+end
 
 ---------------------------------------------------------------------------
 -- UNIT_COMBAT fallback (avoidance and resists without CLEU) and nameplates (V-19)

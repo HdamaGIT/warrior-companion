@@ -13,7 +13,7 @@ local addonName, ns = ...
 --
 -- Output lives in WarriorWorkshopProbeDB, written to disk on /reload or logout.
 
-ns.PROBE_VERSION = 2
+ns.PROBE_VERSION = 3
 
 local EVENT_CAP = 3000
 local DUMP_MAX_DEPTH = 6
@@ -21,10 +21,12 @@ local DEFAULT_RECIPE_DUMPS = 10
 local ADDON_MSG_PREFIX = "WWPROBE"
 local CHAT_PREFIX = "|cffc79c6eWWProbe|r: "
 local HANDLER_ERROR_CAP = 50
+local EARLY_EVENT_CAP = 50
 
 local db -- WarriorWorkshopProbeDB once PLAYER_LOGIN fires
 local registrations = {} -- [event or event@units] = true | error string
 local sessionCounts = {} -- [listener key] = events seen this session (for per-session caps)
+local earlyEvents = {} -- events that arrive before PLAYER_LOGIN (e.g. a blocked action at load), kept per session
 ns.registrations = registrations
 
 -- Our own flags. Encounter state comes from the event NAME only (arguments are never read).
@@ -330,6 +332,16 @@ local function runStatic()
         static.namespaces[name] = type(namespace) == "table" and sortedKeys(namespace) or type(namespace)
     end
     static.bagIndex = dump(resolve("Enum.BagIndex"))
+    -- Restriction and secret enums (V-21): names are not known in advance, so match on the enum name.
+    static.restrictionEnums = {}
+    local enum = resolve("Enum")
+    if type(enum) == "table" then
+        for name, values in pairs(enum) do
+            if type(name) == "string" and (name:find("Restriction", 1, true) or name:find("Secret", 1, true)) then
+                static.restrictionEnums[name] = dump(values)
+            end
+        end
+    end
     static.registrations = registrations
     db.static = static
 
@@ -616,6 +628,7 @@ local function initDB()
     db.pings = db.pings or {}
     db.sessions = db.sessions or {}
     db.registrations = registrations
+    db.earlyEvents = earlyEvents
     updateInstance()
     state.inCombat = ns.CallIsTrue("InCombatLockdown") == true
     db.sessions[#db.sessions + 1] = { at = time(), buildInfo = probeCall("GetBuildInfo"), ctx = ns.Context() }
@@ -634,6 +647,15 @@ local function onEvent(frame, event, ...)
     -- to compare an ADDON_LOADED argument.
     if not db then
         if event ~= "PLAYER_LOGIN" then
+            -- Keep a classified copy so a blocked action during load is not lost.
+            if #earlyEvents < EARLY_EVENT_CAP then
+                local args = {}
+                for i = 1, select("#", ...) do
+                    local ok, info = pcall(classify, (select(i, ...)))
+                    args[i] = ok and info or { error = "classify failed" }
+                end
+                earlyEvents[#earlyEvents + 1] = { at = time(), t = GetTime(), event = event, args = args }
+            end
             return
         end
         initDB()

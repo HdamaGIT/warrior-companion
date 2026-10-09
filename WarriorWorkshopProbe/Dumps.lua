@@ -35,6 +35,7 @@ ns.Extend("FUNCTION_CHECKS", {
     "C_ChallengeMode.IsChallengeModeActive", "IsInInstance", "IsInGroup", "IsInRaid",
     -- restricted-context candidates (V-21; names are guesses)
     "C_RestrictedActions.IsAddOnRestrictionActive", "C_RestrictedActions.GetAddOnRestrictionState",
+    "C_RestrictedActions.CheckAllowProtectedFunctions", "C_Secrets.HasSecretRestrictions", "C_Timer.NewTicker",
     -- spellbook (V-22)
     "C_SpellBook.GetNumSpellBookSkillLines", "C_SpellBook.GetSpellBookSkillLineInfo",
     "C_SpellBook.GetSpellBookItemInfo", "GetNumSpellTabs", "GetSpellTabInfo",

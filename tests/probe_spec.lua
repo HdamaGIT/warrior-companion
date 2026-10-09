@@ -73,7 +73,7 @@ for _, mode in ipairs({ "full", "missing", "secret", "nochecker" }) do
             assert.is_function(client.env.SlashCmdList.WWPROBE)
             assert.are.equal("/wwprobe", client.env.SLASH_WWPROBE1)
             local data = db(client)
-            assert.are.equal(2, data.probeVersion)
+            assert.are.equal(3, data.probeVersion)
             for _, key in ipairs({ "events", "combat", "cleu", "chat", "bindings", "sets", "swap", "trainer" }) do
                 assert.is_truthy(data[key], "missing db." .. key)
             end
@@ -225,6 +225,56 @@ describe("probe recorder details (full mode)", function()
         assert.are.equal(121, macro.index)
         assert.is_true(macro.edit.ok)
         assert.is_truthy(macro.delete)
+    end)
+
+    it("skips CLEU when CombatLogGetCurrentEventInfo is missing (9 Oct finding)", function()
+        local noCleu = C.New("full")
+        noCleu.env.CombatLogGetCurrentEventInfo = nil
+        C.Load(noCleu)
+        local registrations = noCleu.env.WarriorWorkshopProbeDB.registrations
+        assert.are.equal("skipped: CombatLogGetCurrentEventInfo missing", registrations.COMBAT_LOG_EVENT_UNFILTERED)
+        for _, frame in ipairs(noCleu.frames) do
+            assert.is_nil(frame.events.COMBAT_LOG_EVENT_UNFILTERED)
+        end
+    end)
+
+    it("keeps events that arrive before PLAYER_LOGIN, such as a blocked action at load", function()
+        local early = C.New("full")
+        local ns = {}
+        for _, file in ipairs(C.PROBE_FILES) do
+            local chunk = assert(loadfile("WarriorWorkshopProbe/" .. file))
+            setfenv(chunk, early.env)
+            chunk("WarriorWorkshopProbe", ns)
+        end
+        C.Fire(early, "ADDON_ACTION_FORBIDDEN", "WarriorWorkshopProbe", "RegisterEvent")
+        C.Fire(early, "PLAYER_LOGIN")
+        local entry = early.env.WarriorWorkshopProbeDB.earlyEvents[1]
+        assert.are.equal("ADDON_ACTION_FORBIDDEN", entry.event)
+        assert.are.equal("RegisterEvent", entry.args[2].value)
+    end)
+
+    it("samples restriction and secrecy APIs when they exist", function()
+        client.env.C_RestrictedActions = {
+            GetAddOnRestrictionState = function(restrictionType)
+                return restrictionType == 0 and 1 or 0
+            end,
+        }
+        client.env.C_Secrets = { ShouldCooldownsBeSecret = function()
+            return false
+        end }
+        C.Slash(client, "combat on")
+        C.Tick(client, 1)
+        local fields = db(client).combat.byContext.openWorld.fields
+        assert.are.same({ 1 }, fields["restrictionState:0"].examples)
+        assert.are.same({ 0 }, fields["restrictionState:1"].examples)
+        assert.are.same({ false }, fields["secrecy:cooldowns"].examples)
+        assert.is_true(fields["restrictionActive:0"].missing > 0)
+    end)
+
+    it("dumps restriction enums found by name", function()
+        client.env.Enum.AddOnRestrictionType = { Combat = 0, Encounter = 1 }
+        C.Slash(client, "")
+        assert.are.same({ Combat = 0, Encounter = 1 }, db(client).static.restrictionEnums.AddOnRestrictionType)
     end)
 
     it("dumps spells, named abilities and stances", function()
