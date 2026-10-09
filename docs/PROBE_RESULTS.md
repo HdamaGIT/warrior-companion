@@ -3,7 +3,7 @@
 **Status:** template, not yet run. Probe version 2 (M1 + M3).
 **Client build:** ______ **Interface:** ______ **Client folder:** ______ **Date run:** ______
 
-Hugh runs the probe and pastes `WarriorWorkshopProbe.lua` from SavedVariables; Claude then fills in each section below. Every "Decision" either cites a `D-` entry in `docs/DECISIONS.md` or says "none needed". The beta run script is at the end of this file.
+Hugh runs the probe and pastes `WarriorWorkshopProbe.lua` from SavedVariables; Claude then fills in each section below. Every "Decision" either cites a `D-` entry in `docs/DECISIONS.md` or says "none needed". The step-by-step beta procedure is `docs/BETA_TESTING.md`.
 
 Where to look in the dump: `static` = `/wwprobe`; `prof` = `/wwprobe prof`; `items` = `/wwprobe item`; `gear` = `/wwprobe gear`; `bags` = `/wwprobe bags`; `pings` = `/wwprobe ping`; `events` / `eventCounts` / `eventCountsByContext` / `registrations` = event recorder (unit-filtered events are keyed `EVENT@units`, e.g. `UNIT_SPELLCAST_SUCCEEDED@player`); `combat` = `/wwprobe combat` sampler (`byContext.<ctx>.fields.<key>` holds counts of readable / secret / isNil / unchecked / error / missing plus up to 5 example values; `transitions` holds usability changes); `cleu`; `unitCombat`; `nameplates`; `spells`; `trainer`; `tank`; `chat` (`attempts[*]` with `echoed` / `blocked`); `blocked`; `bindings`; `sets`; `swap`; `macro`; `handlerErrors` (probe bugs; should be empty). Contexts are `openWorld`, `instance` and `encounter`.
 
@@ -261,53 +261,9 @@ Fill in after the run. Each Phase B–D feature is **Go**, **Degraded** (state t
 | X-07 Macro generator | V-29, V-22 | | |
 | Tank stat sheet | V-33 | | |
 
-## Beta run script (M0, M1, M2 and M3 together; run before 21 October 2026)
+## Beta run script
 
-SPEC_V2 §12.2 lists the M3 tests (reproduced at the end). Because nothing has run in Forever yet, this script also covers the M0, M1 and M2 checks, ordered so the most valuable results come first. **Parts A–C are the minimum viable run (about 45 minutes, solo).** If time runs out after Part C, do the "Finish" steps anyway.
-
-**Before you start**
-- Both add-ons installed (junctions per `docs/DEV_SETUP.md`): `WarriorWorkshop` and `WarriorWorkshopProbe`.
-- `/console scriptErrors 1`, then `/reload`.
-- In the character pane, create **two equipment sets** (e.g. "DPS" with a two-hander, "Tank" with one-hander + shield).
-- Have both weapon setups in your bags (one equipped, the other in bags).
-- Optional but useful: a second player with the probe installed, for Part D.
-
-**Part A: load checks (5 min)**
-1. Run `docs/verification/M0.md` and `docs/verification/M2.md`. Note any `API unavailable: ...` lines.
-2. `/wwprobe clear`, then `/wwprobe`. Expected: version/interface line, API counts, `issecretvalue: function` or `nil`.
-
-**Part B: solo, out of combat (10 min)**
-3. `/wwprobe spells` (lists abilities that did not resolve by name), `/wwprobe tank` (then glance at the character pane: dodge, parry, block, armour), `/wwprobe macro` (expected: `create ok, edit ok, deleted`).
-4. `/wwprobe sets`, then `/wwprobe sets 1`. Expected: "n of n slots now match the set".
-5. Key binding (V-30, V-25): `/wwprobe chatkey`, then open Key Bindings → AddOns → Warrior Workshop Probe, bind **"Probe: SAY test line (key press)"** to a spare key, close, and press it **outdoors**. Expected: a `[WWPROBE test] … SAY key` line in /say.
-6. `/wwprobe chat` **outdoors, solo**. Expected: SAY and YELL attempts reported, probably `no echo` + `ADDON_ACTION_BLOCKED` (that is the finding). Dismiss any "interface action failed" message.
-7. Swap button (V-28): `/wwprobe swapbtn ` then shift-click the **bag** weapon(s) you want to swap *to* (main hand first, off hand second), Enter. Expected: "Swap button ready on CTRL-SHIFT-F9".
-8. Visit a warrior trainer and open the window (the dump is automatic). Expected: "Trainer dump saved (auto)".
-
-**Part C: solo, open-world combat (25 min)**
-9. `/wwprobe combat on`.
-10. Fight at least 5 mobs, including one caster: Charge in, let mobs dodge/parry/block you, use **Overpower** when it lights up, interrupt the caster (Pummel or Shield Bash), take one mob below 20% and use **Execute**, use **Battle Shout** and let it **expire** once, use Rend / Sunder Armor / Hamstring / Thunder Clap if you have them.
-11. Mid-fight: press **Ctrl-Shift-F9** once (do the weapons change?), and type `/wwprobe sets 2` (does armour change in combat?).
-12. After combat: `/wwprobe swapbtn restore`, then `/wwprobe status`. Expected: openWorld samples > 0, CLEU seen > 0 (or 0 = finding), handler errors 0.
-
-**Part D: with a second player (45–60 min)**
-13. Party in the open world: warn your partner, then `/wwprobe chat` (PARTY, SAY, YELL). Taunt mobs repeatedly (hoping for a resist); use Challenging Shout and Shield Wall.
-14. Dungeon trash (sampler still on): `/wwprobe chat party` (or `instance_chat` if queued through group finder) and `/wwprobe ping`.
-15. First boss: follow the **Encounter test script** above (steps 5–9), and also type `/wwprobe chat party` (or `instance_chat`) mid-fight. Note if any "interface action failed" message appears.
-
-**Part E: relog and built-ins (10 min)**
-16. Log out to character select and back in. `/wwprobe chatkey`. Expected: the key is still bound (V-30 persistence).
-17. Note the built-ins (V-31) in a few words each: what the **Cooldown Manager** can show for warrior abilities (Edit Mode / settings); whether a **swing timer** exists and its options; **floating combat text** options for parry/dodge/block; whether a **loss-of-control** frame appears when stunned/feared.
-
-**Part F: Workshop extras, if time (M1 solo checks)**
-18. The "Solo checks" list above: `/wwprobe prof` with Blacksmithing and Mining open, `/wwprobe gear`, `/wwprobe item <link>`, `/wwprobe bags` at the bank, and three crafts.
-
-**Finish**
-19. `/wwprobe status`, then `/reload` (writes the file).
-20. Send back:
-    - `World of Warcraft\<client folder>\WTF\Account\<ACCOUNT>\SavedVariables\WarriorWorkshopProbe.lua` (and the second player's copy if Part D was done);
-    - `...\WTF\Account\<ACCOUNT>\<Realm>\<Character>\SavedVariables\WarriorWorkshop.lua` (M2 check);
-    - the client folder name, any Lua error text, any `API unavailable` lines, and your V-31 notes.
+Follow **`docs/BETA_TESTING.md`**: it covers the M0, M1, M2 and M3 checks in stages, each with a pass check, and ends with `python tools/wowdev.py collect` (no pasting needed). The SPEC_V2 test script it implements is kept below for reference.
 
 **SPEC_V2 §12.2 test script (as specified)**
 1. Open world: `/wwprobe combat` on; fight 5 mobs incl. one caster; Charge, interrupt, let dodges/parries/blocks happen; use Battle Shout and let it expire.

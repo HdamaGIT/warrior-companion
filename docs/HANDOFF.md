@@ -50,7 +50,7 @@ CI was red between `1218551` and `52ecc92` (three placeholder comment lines over
 - `sim-save/` (untracked, from a simulator run outside this session) was left alone.
 
 ## Next step
-Hugh runs the combined beta script (`docs/PROBE_RESULTS.md`, "Beta run script"; checklist `docs/verification/M3.md`, plus `M0.md` and `M2.md`) **before 21 October**, then pastes back the files listed under "Finish".
+Hugh follows `docs/BETA_TESTING.md` (Stages 1–7) **before 21 October**, then says "beta run done"; run `python tools/wowdev.py collect` and read `beta-results/<latest>/`. The add-ons are already installed as junctions into `C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns` (beta client version 1.60.1.70291; both `.toc` files now list `## Interface: 16001, 120105`, where 16001 is a guess until V-01).
 
 ## Suggested next prompt
-> Read CLAUDE.md, docs/HANDOFF.md, docs/DECISIONS.md and docs/PROBE_RESULTS.md. Here are my beta results: WarriorWorkshopProbe.lua <paste>, the second player's file <paste or "none">, WarriorWorkshop.lua (account and character) <paste>, client folder <name>, Lua errors <paste>, V-31 notes <notes>, and my answers on P-1..P-8 and the D-029 errata <answers>. Fill in PROBE_RESULTS.md and the decision gate, record the decisions, fix anything the run turned up, and revise the Adapter [VERIFY] functions. Don't start M5 until I approve it.
+> Read CLAUDE.md, docs/HANDOFF.md, docs/DECISIONS.md and docs/PROBE_RESULTS.md. Beta run done: run `python tools/wowdev.py collect` and read the files. Interface number <N>, Lua errors <paste or none>, weapon/armour swap in combat <yes/no>, V-31 notes <notes>, and my answers on P-1..P-8 and the D-029 errata <answers>. Fill in PROBE_RESULTS.md and the decision gate, record the decisions, fix anything the run turned up, and revise the Adapter [VERIFY] functions. Don't start M5 until I approve it.

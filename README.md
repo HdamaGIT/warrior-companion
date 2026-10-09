@@ -29,7 +29,7 @@ At the moment the add-on loads, creates (or migrates) its schema v2 saved variab
 
 ## Development
 
-See [`docs/DEV_SETUP.md`](docs/DEV_SETUP.md) for the Windows junction setup, the `/reload` loop and optional local tooling. CI runs `luacheck .` and `busted` on Lua 5.1 for every push.
+To test in the game, follow [`docs/BETA_TESTING.md`](docs/BETA_TESTING.md); `python tools/wowdev.py install|status|collect` puts the add-ons in the client and fetches their saved files. See [`docs/DEV_SETUP.md`](docs/DEV_SETUP.md) for the Windows junction setup, the `/reload` loop and optional local tooling. CI runs `luacheck .` and `busted` on Lua 5.1 for every push.
 
 Working rules for Claude Code live in [`CLAUDE.md`](CLAUDE.md). Session state is kept in [`docs/HANDOFF.md`](docs/HANDOFF.md).
 

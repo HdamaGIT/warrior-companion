@@ -13,6 +13,8 @@ Below, `%WOW%` stands for the full client folder, for example `C:\Program Files 
 
 ## 2. Junction the add-ons into the client
 
+**Quickest:** from the repo root run `python tools/wowdev.py install` (and `status`, `uninstall`, `collect`). It finds the client (default `_classic_beta_`, the Forever beta client on this machine), creates both junctions and can copy the saved files back into `beta-results/`. The manual commands below do the same thing.
+
 A directory junction lets the game load the add-ons straight from the repo, so you don't need to copy anything. Junctions don't need admin rights or Developer Mode. Close the game first.
 
 **Command Prompt (`cmd.exe`):**
