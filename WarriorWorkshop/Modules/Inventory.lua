@@ -1,1 +1,2 @@
--- Placeholder: implemented in M4 (Inventory, SPEC_V2 §10.1). Not listed in WarriorWorkshop.toc yet (D-010).
+-- Placeholder: implemented in M4 (Inventory, SPEC_V2 §10.1).
+-- Not listed in WarriorWorkshop.toc yet (D-010).

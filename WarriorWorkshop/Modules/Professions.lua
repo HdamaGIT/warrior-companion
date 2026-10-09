@@ -1,1 +1,2 @@
--- Placeholder: implemented in M10 (Professions, SPEC_V2 §10.2). Not listed in WarriorWorkshop.toc yet (D-010).
+-- Placeholder: implemented in M10 (Professions, SPEC_V2 §10.2).
+-- Not listed in WarriorWorkshop.toc yet (D-010).

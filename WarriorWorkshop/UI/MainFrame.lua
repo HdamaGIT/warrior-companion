@@ -1,1 +1,2 @@
--- Placeholder: main window shell, implemented in M6 (SPEC_V2 §7.6). Not listed in WarriorWorkshop.toc yet (D-010).
+-- Placeholder: main window shell, implemented in M6 (SPEC_V2 §7.6).
+-- Not listed in WarriorWorkshop.toc yet (D-010).

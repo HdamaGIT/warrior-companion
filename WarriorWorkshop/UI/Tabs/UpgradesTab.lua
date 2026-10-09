@@ -1,1 +1,2 @@
--- Placeholder: gear advisor tab, implemented in M13. Not listed in WarriorWorkshop.toc yet (D-010).
+-- Placeholder: gear advisor tab, implemented in M13.
+-- Not listed in WarriorWorkshop.toc yet (D-010).
