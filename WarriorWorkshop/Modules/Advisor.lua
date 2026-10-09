@@ -1,0 +1,1 @@
+-- Placeholder: gear advisor and tank stat sheet, implemented in M13 (SPEC_V2 §10.4). Not listed in WarriorWorkshop.toc yet (D-010).

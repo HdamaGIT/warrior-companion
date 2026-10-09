@@ -1,3 +1,3 @@
 describe("readiness", function()
-    pending("implemented in M8")
+    pending("implemented in M14")
 end)

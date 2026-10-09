@@ -1,1 +1,1 @@
--- Placeholder: implemented in M5 (Prices + Planner). Not listed in WarriorWorkshop.toc yet (D-010).
+-- Placeholder: implemented in M11 (Prices + planner logic, SPEC_V2 §10.3). Not listed in WarriorWorkshop.toc yet (D-010).

@@ -1,3 +1,3 @@
 describe("planner", function()
-    pending("implemented in M5")
+    pending("implemented in M11")
 end)

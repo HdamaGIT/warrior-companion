@@ -1,1 +1,1 @@
--- Placeholder: implemented in M8 (Readiness). Not listed in WarriorWorkshop.toc yet (D-010).
+-- Placeholder: implemented in M14 (Readiness, SPEC_V2 §10.5). Not listed in WarriorWorkshop.toc yet (D-010).
