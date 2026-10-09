@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Document** | `docs/SPEC.md` |
-| **Version** | 2.0 |
+| **Document** | `docs/SPEC_V2.md` |
+| **Version** | 2.0.1 (errata D-029, 9 Oct 2026) |
 | **Date** | 9 October 2026 |
 | **Owner** | Hugh |
 | **Target client** | World of Warcraft: Forever (beta to 21 Oct 2026; launch 4 Nov 2026) |
@@ -33,6 +33,7 @@ This is the single source of truth for the Warrior Workshop add-on. Claude Code 
 | Pull check, death recap and other survival tooling moved to backlog | Triage: 3 |
 | Probe extended with combat, chat, gear-set, macro and keybinding checks | New tracks depend on them |
 | Workshop scope (professions planner, gear advisor, readiness) retained, moved after the combat/announce/gear tracks; tank stat sheet added to the gear advisor | Still wanted; less urgent |
+| Saved data moves to schema 2: `hideInCombat` → `hideMainInCombat`, v1 `gear` (stat-weight profiles) → `advisor`, new `combat`/`announce`/`gear` sections; a v1→v2 migration does this | New tracks need the `gear` name; no user data dropped (D-029) |
 
 ---
 
@@ -132,7 +133,7 @@ This is the single source of truth for the Warrior Workshop add-on. Claude Code 
 
 | Phase | Name | Contents | Status |
 |---|---|---|---|
-| **A** | Foundations | M0 scaffold, M1 probe, M2 core, M3 probe extension, M4 inventory | M0–M1 done; M2 in progress |
+| **A** | Foundations | M0 scaffold, M1 probe, M2 core, M3 probe extension, M4 inventory | M0–M3 built; first beta run 9 Oct (see `docs/PROBE_RESULTS.md`); in-game checks in progress |
 | **B** | Combat companion | M5 combat core + must-have alerts; M6 main window, config and should-have alerts | Build next |
 | **C** | Announcer | M7 tank announcer | Build |
 | **D** | Gear control | M8 gear sets, keybinds, swap queue, weapon swap, macro generator | Build |
@@ -154,7 +155,8 @@ warrior-workshop/
 ├── .gitignore  .editorconfig  .luacheckrc  .busted
 ├── .github/workflows/ci.yml, release.yml
 ├── docs/
-│   ├── SPEC.md                   # this document
+│   ├── SPEC_V2.md                # this document
+│   ├── SPEC.md                   # v0.1, superseded
 │   ├── IDEAS_BACKLOG.md          # triaged ideas
 │   ├── DECISIONS.md
 │   ├── HANDOFF.md
@@ -197,10 +199,13 @@ warrior-workshop/
 │   ├── helpers/mock_adapter.lua  helpers/replay.lua  helpers/mock_clock.lua
 │   ├── fixtures/                 # items, recipes, inventory, streams/*.lua
 │   └── *_spec.lua
-└── tools/analysis/README.md      # placeholder (Phase F)
+└── tools/
+    ├── sim/                      # offline client simulator (D-011); tests run in CI
+    ├── wowdev.py                 # install into the client, collect SavedVariables (D-034)
+    └── analysis/README.md        # placeholder (Phase F)
 ```
 
-Placeholder files for later phases are fine; do not implement ahead of the current milestone.
+Placeholder files for later phases are fine; do not implement ahead of the current milestone. The v0.1 placeholders moved to this layout: `Modules/Gear.lua` → `Modules/Advisor.lua`, `UI/*Tab.lua` → `UI/Tabs/` (D-029).
 
 ---
 
@@ -309,8 +314,9 @@ Two SavedVariables tables. If M2 shipped schema v1, add a migration `to = 2` tha
 WarriorWorkshopDB = {
   schemaVersion = 2,
   settings = {
-    debug = false, hideMainInCombat = true,
+    debug = false, hideMainInCombat = true,     -- v1 `hideInCombat`, renamed by the v2 migration
     window = { point, x, y, w, h, tab = "alerts" },
+    batchSize = ..., planner = { ... },         -- Phase E planner settings, kept from v1 (D-014)
   },
   -- Phase E
   prices = { [itemID] = { value, source, updatedAt } },
@@ -357,12 +363,12 @@ WarriorWorkshopCharDB = {
   inventory = { bags = {}, bagsScannedAt, bank = {}, bankScannedAt },
   professions = { [skillLineID] = { name, rank, maxRank, scannedAt, recipes = {} } },
   targets = {}, craftLog = {}, colourObservations = {},
-  advisor = { activeProfile = "dps", profiles = { dps = {...}, tank = {...} } },
+  advisor = { activeProfile = "dps", profiles = { dps = {...}, tank = {...} } },  -- v1 `gear` moves here
   readiness = { consumables = {}, durabilityAmber = 0.60, durabilityRed = 0.30, expectedSet = {} },
 }
 ```
 
-Ring buffers (craft log) evict oldest first. Corrupt or future schema versions: back up to `*_backup`, reinitialise, warn.
+Ring buffers (craft log) evict oldest first. Corrupt or future schema versions: back up to a `_backup` field inside the same table (D-012), reinitialise, warn.
 
 ---
 
@@ -587,6 +593,7 @@ Out of combat traffic lights: lowest durability (≥ 60% / 30–59% / < 30%), tr
 | `TRADE_SKILL_SHOW/LIST_UPDATE`, craft events, `SKILL_LINES_CHANGED` | Professions |
 | `UPDATE_INVENTORY_DURABILITY` | Readiness |
 | `GET_ITEM_INFO_RECEIVED` | Adapter async |
+| `PLAYER_LOGOUT` | DB (stamps `meta.lastSeen`) |
 
 ---
 
@@ -634,7 +641,8 @@ Added to `WarriorWorkshopProbe` as a separate change; may be built in parallel w
 - **busted** for all pure logic: conditions, rule engine, avoidance detector, announce routing and throttles, macro generation, gear queue, planner, advisor, tank sheet, readiness, migrations.
 - **Replay harness** (`tests/helpers/replay.lua` + `mock_clock.lua`): feed normalised event streams from `tests/fixtures/streams/*.lua` into modules; assert on outputs. Convert M3 probe logs into fixtures.
 - **Secret mode**: mock Adapter returning `nil` for every combat accessor; the whole HUD and announcer must run without error and show nothing.
-- **CI**: luacheck + busted on every push/PR. **Release**: zip `WarriorWorkshop/` on tag `v*`.
+- **Simulator** (`tools/sim/`, D-011): loads the add-on against a fake client offline; its tests run in CI.
+- **CI**: luacheck + busted + simulator tests on every push/PR. **Release**: zip `WarriorWorkshop/` on tag `v*`.
 - **Performance**: ≤ 0.5ms average per combat event handler; one shared ticker; no allocation in hot paths; Workshop scans ≤ 5ms typical.
 - **In-game verification**: each milestone ends with `docs/verification/M<n>.md`; complete only when Hugh confirms.
 
@@ -717,7 +725,7 @@ Each milestone: implement → unit tests → luacheck → `docs/verification/M<n
 
 ## 18. Decisions (`docs/DECISIONS.md`)
 
-Carry forward D-001 to D-005. Add:
+Carry forward D-001 to D-015 (D-004 as amended). The new decisions below were recorded in the log as **D-016 to D-028** (D-030 has the mapping), because D-006 to D-015 were already taken. Add:
 
 | ID | Decision | Rationale |
 |---|---|---|
@@ -742,5 +750,7 @@ Carry forward D-001 to D-005. Add:
 **Backlog (rated 3):** pull check (X-11), death recap (X-09), weapon upgrade watch (Q-04), Bloodrage prompt (R-08), big stance indicator (X-05), runner/add alerts (X-10), Demoralising Shout uptime (U-03), announce templates (A-11), weapon enchant missing (U-10), set integrity check (G-08), threat lead (T-02), marker helper (T-07), big cooldown-ready alerts (R-07), pull announce (A-10), loss-of-control hint (X-04). **Rated 2 but unscheduled:** trainer reminder (Q-03).
 
 **Raid coordination (rated 3, outline only):** shout assignments, Sunder coordination, tank cooldown rotation, post-fight warrior report, co-tank taunt tracker; per-boss cooldown plan timelines and own-cast logging in encounters; Python analysis pipeline in `tools/analysis` joining SavedVariables to Warcraft Logs exports. Depends on V-06–V-09.
+
+**Still out of scope from v0.1 §3.1:** alts, auction house scanning, minimap button, CurseForge publishing.
 
 **Not doing:** rotation engine, swing timer, levelling analytics, quest guidance, PvP tooling, profession gear sets, event-driven auto-swaps, trinket cycling, and the other items marked Pass in `IDEAS_BACKLOG.md`.

@@ -6,7 +6,7 @@ Adopt `docs/SPEC_V2.md` (review, conflicts, challenges, plan approved by Hugh), 
 ## Outcome
 **Achieved, pending human check.** M3 and M2 are built and CI is green (see verification below). Nothing has run in Forever yet: the M0, M1, M2 and M3 in-game checks are all outstanding, and **one combined beta session** covers them (script at the end of `docs/PROBE_RESULTS.md`). M4 and later have not been started.
 
-**`CLAUDE.md` is updated but NOT committed:** Hugh asked to see the diff first. Commit it with `docs: update CLAUDE.md for SPEC_V2` once approved.
+**`CLAUDE.md`** for SPEC_V2 approved and committed (9 Oct). **SPEC_V2 errata (D-029)** approved and applied (spec version 2.0.1).
 
 ## What was done
 - **Docs:** `SPEC.md` has the superseded banner (`SPEC_LEVELLING.md`/`SPEC_LEVELING.md` is not in the repo; nothing to banner). `SPEC_V2.md` and `IDEAS_BACKLOG.md` are committed. `DECISIONS.md`: SPEC_V2's D-006..D-018 recorded as **D-016..D-028** (mapping in D-030), D-004 marked amended by D-017, plus D-029 (SPEC_V2 errata), D-031 (build order), D-032 (probe design), D-033 (restricted detection), and proposals **P-1..P-8** awaiting Hugh. README points at SPEC_V2. `PROBE_RESULTS.md` has V-11..V-33 (V-20 retired), the decision gate table, and the combined beta run script. New `docs/verification/M3.md`; `M2.md` rewritten for schema 2; `M0.md` schema number updated.
@@ -35,9 +35,7 @@ CI was red between `1218551` and `52ecc92` (three placeholder comment lines over
 - A migrated v1 account keeps `window.tab = "planner"`; the M6 UI must fall back when a saved tab does not exist.
 
 ## Open questions for Hugh
-1. Approve the `CLAUDE.md` diff (shown in the session summary), then commit it.
-2. Confirm or reject proposals **P-1..P-8** in `docs/DECISIONS.md` (they affect M5–M8).
-3. Agree the SPEC_V2 errata (D-029) so `SPEC_V2.md` §18, the header and §6 can be corrected in a `docs:` commit.
+1. Confirm or reject proposals **P-1..P-8** in `docs/DECISIONS.md` (they affect M5–M8).
 
 ## Notes for M5 (from the simulator session, 9 Oct)
 - Hugh approved a **visual preview** of UI frames, rendered from the simulator into HTML, starting with the first UI milestone (M5 HUD under D-031). Build frames from plain `CreateFrame` + `SetPoint`/`SetSize`/FontStrings/textures, with minimal Blizzard templates; keep HUD layout in data; drive the 0.2s ticker through the Adapter/C_Timer (no `OnUpdate`), so the simulator clock can run it. **Tell Hugh when M5 UI work starts** so the preview can be built alongside.
@@ -53,4 +51,4 @@ CI was red between `1218551` and `52ecc92` (three placeholder comment lines over
 Hugh follows `docs/BETA_TESTING.md` (Stages 1–7) **before 21 October**, then says "beta run done"; run `python tools/wowdev.py collect` and read `beta-results/<latest>/`. The add-ons are already installed as junctions into `C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns` (beta client version 1.60.1.70291; both `.toc` files now list `## Interface: 16001, 120105`, where 16001 is a guess until V-01).
 
 ## Suggested next prompt
-> Read CLAUDE.md, docs/HANDOFF.md, docs/DECISIONS.md and docs/PROBE_RESULTS.md. Beta run done: run `python tools/wowdev.py collect` and read the files. Interface number <N>, Lua errors <paste or none>, weapon/armour swap in combat <yes/no>, V-31 notes <notes>, and my answers on P-1..P-8 and the D-029 errata <answers>. Fill in PROBE_RESULTS.md and the decision gate, record the decisions, fix anything the run turned up, and revise the Adapter [VERIFY] functions. Don't start M5 until I approve it.
+> Read CLAUDE.md, docs/HANDOFF.md, docs/DECISIONS.md and docs/PROBE_RESULTS.md. Beta run done: run `python tools/wowdev.py collect` and read the files. Interface number <N>, Lua errors <paste or none>, weapon/armour swap in combat <yes/no>, V-31 notes <notes>, and my answers on P-1..P-8 <answers>. Fill in PROBE_RESULTS.md and the decision gate, record the decisions, fix anything the run turned up, and revise the Adapter [VERIFY] functions. Don't start M5 until I approve it.
