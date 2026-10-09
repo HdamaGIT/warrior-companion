@@ -56,5 +56,4 @@ jobs:
             grep -E '^(FAIL|ERROR)' sim.out | sed 's/^/::error::/'
             exit 1
           }
-          echo "::notice title=simulator::$(grep -E '^(Ran|OK|FAILED)' sim.out | tr '
-' ' ')"
+          echo "::notice title=simulator::$(grep -E '^(Ran|OK|FAILED)' sim.out | paste -sd ' ' -)"
