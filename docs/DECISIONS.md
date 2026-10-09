@@ -1,13 +1,13 @@
 # Decision log
 
-Entries here override `docs/SPEC.md`. Add new decisions with the next D-number. Never renumber.
+Entries here override `docs/SPEC_V2.md` (and the superseded `docs/SPEC.md`). Add new decisions with the next D-number. Never renumber an entry once it is in this file.
 
 | ID | Date | Decision | Rationale |
 |---|---|---|---|
 | D-001 | 2026-10-08 | The add-on lives in a subfolder of a mono-repo, alongside the probe, tests, docs and tools. | Supports the v2 Python tooling and Phase 0 without separate repos. |
 | D-002 | 2026-10-08 | All WoW API access goes through `Core/Adapter.lua`. | Contains API drift; gives tests a seam for mocking. |
 | D-003 | 2026-10-08 | No external libraries (Ace3 etc.) in v1. | Fewer dependencies during an unstable beta. Revisit for the v2 config UI and comms. |
-| D-004 | 2026-10-08 | v1 runs entirely out of combat; the UI hides on entering combat. | Secret values and encounter restrictions; Blizzard policy risk. |
+| D-004 | 2026-10-08 | v1 runs entirely out of combat; the UI hides on entering combat. **Amended by D-017.** | Secret values and encounter restrictions; Blizzard policy risk. |
 | D-005 | *pending* | Interface number and client folder name. | To be filled in from the probe (V-01). |
 | D-006 | 2026-10-08 | M0 ships a minimal `Core/Adapter.lua` (`GetBuildInfo`, `GetAddOnVersion`, `Print`) instead of calling `GetBuildInfo` from `Init.lua`. | `/ww version` needs build data, and D-002 forbids data API calls outside the Adapter. M2 extends this file rather than replacing it. |
 | D-007 | 2026-10-08 | The probe records an event argument's **value** (by plain assignment, with no operations on it) only when a secret checker exists and reports the value as not secret. Otherwise it records type and secret status only. | Type alone cannot answer V-07 ("readable spellID") or V-09 ("is the tag readable"). Storing a value that has been confirmed non-secret cannot error. If no checker exists, that is itself the V-10 finding. |
@@ -19,3 +19,36 @@ Entries here override `docs/SPEC.md`. Add new decisions with the next D-number. 
 | D-013 | 2026-10-09 | `Core/Events.lua` obtains its event frame (`Adapter.CreateEventFrame`) and timer (`Adapter.After`, `Adapter.Now`, `Adapter.Time`) from the Adapter. `.luacheckrc` is unchanged apart from extra read-only WoW names (`C_Timer`, unit and inventory APIs) for the Adapter. | Keeps the rule that only the Adapter touches WoW globals, and lets the event bus be tested with a fake frame and a manual timer. |
 | D-014 | 2026-10-09 | Schema v1 `settings` gains `planner = { calibrationMinAttempts = 30, defaultOdds = { optimal = 1.00, medium = 0.75, easy = 0.25, trivial = 0.00 } }`. Values are labelled placeholders. | SPEC §7.5 says the odds threshold and defaults "live in settings" but §6 omitted them. Added to schema v1 rather than a v2 migration because nothing has shipped. |
 | D-015 | 2026-10-09 | M2 was built before the M1 probe was run, at Hugh's request. Every `Adapter` implementation beyond M0's three functions is an **unverified skeleton** (most likely Mainline API, guarded, `nil` plus warn-once if missing, tagged `[VERIFY V-0x]`). It is to be revised once `docs/PROBE_RESULTS.md` is filled in. | Unblocks Core work, but Adapter behaviour, the `ITEM_MOD_*` key table and the bag/bank IDs are guesses until the probe results arrive. |
+| D-016 | 2026-10-09 | SPEC v2 supersedes SPEC v0.1 and SPEC_LEVELLING v0.1; milestone order per SPEC_V2 §15 (as adjusted by D-031). | Triage of 9 Oct 2026. |
+| D-017 | 2026-10-09 | **D-004 amended:** the in-combat HUD and announcer are in scope in the open world and instances outside restricted contexts; the main window still hides in combat. | Restrictions apply only to encounters and Mythic+. |
+| D-018 | 2026-10-09 | No rotation / "press next" engine. | Policy risk; the value is in reactive and upkeep signals. |
+| D-019 | 2026-10-09 | Alerts and announcements are declarative tables with a fixed condition vocabulary; no user Lua. | Safety, testability, scope. |
+| D-020 | 2026-10-09 | A secret or unavailable value is unknown, and unknown is hidden. | Secret-safe by construction. |
+| D-021 | 2026-10-09 | Combat and announce features suspend in restricted contexts. | Blizzard rules. |
+| D-022 | 2026-10-09 | Levelling analytics (XP dashboard, session review, mob intel, fight log) removed. | Triage: Pass. |
+| D-023 | 2026-10-09 | No swing timer. | Triage: Pass; built-in [VERIFY V-31]. |
+| D-024 | 2026-10-09 | Announcer: SAY/YELL outdoors fall back to local output; party/raid/instance defaults; throttled. | Hardware-event rule; etiquette. |
+| D-025 | 2026-10-09 | Gear: Equipment Manager sets are the source of truth; armour is never swapped in combat (queued); weapon swaps only via secure buttons or macros. | Protected actions. |
+| D-026 | 2026-10-09 | `Core/Secure.lua` is the only place for secure frames, bindings and macro writes. | Taint containment. |
+| D-027 | 2026-10-09 | One avoidance detector feeds both local combat text and announcements. | No duplicate CLEU logic. |
+| D-028 | 2026-10-09 | R-06 cooldown tracker is gated on V-31. | Avoid duplicating Blizzard's Cooldown Manager. |
+| D-029 | 2026-10-09 | **SPEC_V2 errata.** (a) §18 says "carry forward D-001 to D-005"; D-006 to D-015 above also remain in force (D-004 as amended). (b) §6 omits `settings.batchSize` and `settings.planner` (D-014); both stay in schema v2 for Phase E. (c) §6 "back up to `*_backup`" is superseded by D-012. (d) §6 renames `settings.hideInCombat` to `hideMainInCombat` and moves the v1 `gear` (stat-weight profiles) to `advisor`; a v1→v2 migration does both. (e) The v1 placeholders move to the §4 layout: `Modules/Gear.lua` → `Modules/Advisor.lua`, `UI/*Tab.lua` → `UI/Tabs/`. (f) The simulator (D-011, `tools/sim/`) belongs in §4 and §13. (g) The §11 event map also keeps `PLAYER_LOGOUT` (stamps `lastSeen`). (h) The v0.1 §3.1 out-of-scope list (alts, AH scanning, minimap button, CurseForge) still applies. (i) The header's `Document` field should read `docs/SPEC_V2.md`; §3 "M0–M1 done" means built, not verified in game. SPEC_V2 itself is not edited until Hugh agrees. | Found in the 9 Oct review; keeps code and spec consistent without a silent spec edit. |
+| D-030 | 2026-10-09 | **Renumbering.** SPEC_V2 §18 numbered its decisions D-006 to D-018, which were already used. They are recorded as D-016 to D-028: V2 D-006→D-016, D-007→D-017, D-008→D-018, D-009→D-019, D-010→D-020, D-011→D-021, D-012→D-022, D-013→D-023, D-014→D-024, D-015→D-025, D-016→D-026, D-017→D-027, D-018→D-028. | The log is never renumbered. |
+| D-031 | 2026-10-09 | **Build order.** This session: M3 (probe extension) before finishing M2, because M3 has the 21 Oct beta deadline and the probe is a separate add-on. After the probe results: M5 → M7 → M4 → M6 → M8 → M9 (M4 inventory is only needed by X-02 in M6). | Puts the launch-target work (M5, M7 core) before work nothing at launch depends on. |
+| D-032 | 2026-10-09 | **M3 probe design.** (a) The combat sampler aggregates per field and context (`openWorld`/`instance`/`encounter`): counts of readable, secret, nil and error, the first 5 readable example values (allowed by D-007), and timestamped transitions of `IsSpellUsable` for Overpower, Revenge and Execute. It samples only in combat or with a hostile target. (b) CLEU is capped at 300 events per session; `UNIT_COMBAT` for player and target is recorded as a fallback source for avoidance and resists. (c) Chat success is judged by `ADDON_ACTION_BLOCKED`/`FORBIDDEN` events and our own chat echoes, not by `pcall`. (d) The key-press path for SAY and V-30 uses one probe `Bindings.xml` binding. (e) The swap button registers `AnyDown`/`AnyUp`, uses `CTRL-SHIFT-F9` without `SaveBindings`, and restores the key's previous action. (f) Candidate namespaces for V-21/V-31 (`C_RestrictedActions`, `C_Secrets`, `C_CooldownViewer`, `C_DamageMeter`) are unconfirmed names; a missing one is itself a finding. (g) Test chat text is `[WWPROBE test]`. | A raw 0.25s sampler would bloat SavedVariables and cannot answer V-13/V-14, which are about values and transitions. `pcall` does not see a blocked protected call. CLEU may be unavailable in Forever outside encounters too. |
+| D-033 | 2026-10-09 | **Restricted detection.** `restricted` = encounter in progress, Mythic+ active, or a direct V-21 signal. A secret returned by an accessor makes only that value unknown (D-020) and increments a diagnostic counter; it does not suspend everything (amends SPEC_V2 §5.2 "any combat accessor returned a secret in the last 2s"). Context seeds the encounter flag from `IsEncounterInProgress()` [VERIFY] at login. Confirm at the M3 decision gate. | If some values are secret in the open world (e.g. hostile players), the 2s rule would keep the HUD suspended constantly. |
+
+## Proposed, awaiting Hugh's confirmation
+
+These come from the 9 Oct SPEC_V2 review. They affect M5 to M8 only and nothing is built for them yet. Each becomes a D-entry once confirmed, or is dropped.
+
+| Ref | Proposal | Milestone |
+|---|---|---|
+| P-1 | Secret checks cover each table field read (`C_Spell.GetSpellCooldown`, `C_UnitAuras` data), inside `pcall`. If `issecretvalue` is absent, values count as readable only outside restricted contexts. Hot-path accessors return multiple values instead of new tables. | M5 |
+| P-2 | A-01 (parry/dodge/block) defaults to `self` in a party as well; A-02 to A-04 and A-07 stay on PARTY. | M7 |
+| P-3 | `instance` routing means "in an instance-category (LFG) group", not "zone is an instance"; a hand-made party in a dungeon uses PARTY. | M7 |
+| P-4 | SavedVariables keep sparse overrides for announce events and rules; defaults live in code (`Announce/Events.lua`, `RulePacks/`). | M5, M7 |
+| P-5 | No `SetBinding` calls: set and weapon-swap bindings are declared in `Bindings.xml` (`CLICK <button>:LeftButton` for swaps), so Blizzard's Key Bindings UI owns keys. `gear.sets[].key` and `weaponSwaps[].key` drop out of saved data. `Core/Secure.lua` creates secure buttons, sets macrotext and writes macros. | M8 |
+| P-6 | `EquipSet` is a plain API call in the Adapter, not in `Secure.lua`; `gear.queued` is cleared at login. | M8 |
+| P-7 | Stance macro templates are gated on SpellMap like rules, because Forever may not have Classic stances. | M8 |
+| P-8 | The launch target drops X-06 combat text and R-06 unless V-31 shows the built-ins cannot cover them. | M5 |
