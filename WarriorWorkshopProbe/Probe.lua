@@ -1,28 +1,39 @@
 local addonName, ns = ...
 
--- Warrior Workshop Probe (Phase 0, SPEC Section 9). Deliberately crude and
--- throwaway: it answers V-01..V-10 by recording what the Forever client exposes.
+-- Warrior Workshop Probe (M1, extended in M3: SPEC_V2 §12). Deliberately crude and throwaway: it records
+-- what the Forever client exposes so docs/PROBE_RESULTS.md can answer V-01..V-33.
 --
--- SECRET-VALUE SAFETY (D-007): event arguments are never used in arithmetic,
--- comparisons, concatenation or as table keys. For each argument we record
--- type() and the result of issecretvalue(); the raw value is stored by plain
--- assignment ONLY when issecretvalue exists and returns false. Classification
--- runs inside pcall, so an unexpected secret cannot break the recorder.
+-- This file holds the shared helpers, the event recorder and the slash dispatcher. Dumps.lua, Combat.lua and
+-- Actions.lua add commands and listeners through ns.Listen / ns.AddCommand / ns.onInit / ns.onClear.
+--
+-- SECRET-VALUE SAFETY (D-007): event arguments and combat API returns are never used in arithmetic,
+-- comparisons, concatenation or as table keys. For each value we record type() and the result of
+-- issecretvalue(); the raw value is stored by plain assignment ONLY when issecretvalue exists and returns
+-- false. Classification runs inside pcall, so an unexpected secret cannot break the recorder.
 --
 -- Output lives in WarriorWorkshopProbeDB, written to disk on /reload or logout.
 
-ns.PROBE_VERSION = 1
+ns.PROBE_VERSION = 2
 
 local EVENT_CAP = 3000
 local DUMP_MAX_DEPTH = 6
 local DEFAULT_RECIPE_DUMPS = 10
 local ADDON_MSG_PREFIX = "WWPROBE"
 local CHAT_PREFIX = "|cffc79c6eWWProbe|r: "
+local HANDLER_ERROR_CAP = 50
 
-local db -- WarriorWorkshopProbeDB once ADDON_LOADED fires
-local inEncounter = false -- our own flag, toggled by ENCOUNTER_START/END (args never read)
-local registrations = {} -- [event] = true | error string
-local pingSeq = 0
+local db -- WarriorWorkshopProbeDB once PLAYER_LOGIN fires
+local registrations = {} -- [event or event@units] = true | error string
+local sessionCounts = {} -- [listener key] = events seen this session (for per-session caps)
+ns.registrations = registrations
+
+-- Our own flags. Encounter state comes from the event NAME only (arguments are never read).
+local state = { inEncounter = false, inInstance = false, inCombat = false, pingSeq = 0 }
+ns.state = state
+
+-- Lists other files extend before the first /wwprobe run.
+ns.onInit = {}  -- functions(db) run once after the saved table is ready
+ns.onClear = {} -- functions(db) run by /wwprobe clear
 
 ---------------------------------------------------------------------------
 -- Helpers (operate on our own values only, never on event arguments)
@@ -36,6 +47,7 @@ local function out(msg)
         print(CHAT_PREFIX .. msg)
     end
 end
+ns.out = out
 
 --- Looks up a dotted global path such as "C_Item.GetItemStats". Returns nil if absent.
 local function resolve(path)
@@ -48,12 +60,14 @@ local function resolve(path)
     end
     return node
 end
+ns.resolve = resolve
 
 local function pack(...)
     return { n = select("#", ...), ... }
 end
+ns.pack = pack
 
---- Recursively copies a value into SavedVariables-safe form (API data, not event args).
+--- Recursively copies a value into SavedVariables-safe form (out-of-combat API data, not event args).
 local function dump(value, depth, seen)
     depth = depth or 0
     seen = seen or {}
@@ -79,8 +93,10 @@ local function dump(value, depth, seen)
     end
     return value
 end
+ns.dump = dump
 
 --- Calls an API by path inside pcall. Returns { exists, ok, error | returns (dumped) }.
+-- Only for calls whose results cannot be secret (out-of-combat data). Use probeCallSafe otherwise.
 local function probeCall(path, ...)
     local fn = resolve(path)
     if type(fn) ~= "function" then
@@ -96,8 +112,10 @@ local function probeCall(path, ...)
     end
     return { exists = true, ok = true, returns = returns }
 end
+ns.probeCall = probeCall
 
---- Describes one event argument (or one possibly-secret return) without operating on it (D-007).
+--- Describes one value that may be secret, without operating on it (D-007).
+-- @return { type, secret = true|false|"nochecker"|"checkerror"|"unexpected:<type>", value (only if not secret) }
 local function classify(value)
     local info = { type = type(value) }
     local isSecretValue = resolve("issecretvalue")
@@ -121,9 +139,9 @@ local function classify(value)
     end
     return info
 end
+ns.classify = classify
 
---- Like probeCall, but returns are classified instead of copied, because calls made
--- during an encounter (e.g. sends) might return secret values.
+--- Like probeCall, but returns are classified instead of copied, because they might be secret.
 local function probeCallSafe(path, ...)
     local fn = resolve(path)
     if type(fn) ~= "function" then
@@ -141,6 +159,64 @@ local function probeCallSafe(path, ...)
     end
     return report
 end
+ns.probeCallSafe = probeCallSafe
+
+--- Calls an API and reports whether its first return is exactly true. The comparison runs inside pcall,
+-- so a secret return gives nil (unknown) rather than an error.
+-- @return true | false | nil (missing API, error or secret)
+function ns.CallIsTrue(path, ...)
+    local fn = resolve(path)
+    if type(fn) ~= "function" then
+        return nil
+    end
+    local ok, result = pcall(function(...)
+        return fn(...) == true
+    end, ...)
+    if ok then
+        return result
+    end
+    return nil
+end
+
+--- Returns the first return of an API only if it is confirmed not secret (and is a string, number or boolean).
+-- @return value or nil
+function ns.SafeFirst(path, ...)
+    local report = probeCallSafe(path, ...)
+    local first = report.ok and report.returns[1]
+    if type(first) == "table" and first.secret == false then
+        return first.value
+    end
+    return nil
+end
+
+--- Schedules fn after delay seconds through C_Timer.After. fn runs inside pcall; an error is recorded in
+-- handlerErrors instead of reaching the error popup. Returns false if no timer API exists.
+function ns.After(delay, fn)
+    local after = resolve("C_Timer.After")
+    if type(after) ~= "function" then
+        return false
+    end
+    return (pcall(after, delay, function()
+        local ok, err = pcall(fn)
+        if not ok and ns.RecordError then
+            ns.RecordError("timer", err)
+        end
+    end))
+end
+
+--- Returns "encounter", "instance" or "openWorld" from our own flags.
+function ns.Context()
+    if state.inEncounter then
+        return "encounter"
+    elseif state.inInstance then
+        return "instance"
+    end
+    return "openWorld"
+end
+
+local function updateInstance()
+    state.inInstance = ns.CallIsTrue("IsInInstance") == true
+end
 
 local function sortedKeys(tbl)
     local keys = {}
@@ -150,13 +226,22 @@ local function sortedKeys(tbl)
     table.sort(keys)
     return keys
 end
+ns.sortedKeys = sortedKeys
+
+--- Appends a value to a list, dropping the oldest entries above cap.
+function ns.PushCapped(list, value, cap)
+    list[#list + 1] = value
+    while #list > cap do
+        table.remove(list, 1)
+    end
+end
 
 ---------------------------------------------------------------------------
--- Static checks (V-01..V-05, V-10)
+-- Static checks (V-01..V-05, V-10; extended by Dumps.lua for M3)
 ---------------------------------------------------------------------------
 
--- Functions the Adapter surface (SPEC 5.3) and V-02..V-05 may rely on.
-local FUNCTION_CHECKS = {
+-- Functions the Adapter surface and the V-items may rely on. Other files append to these lists.
+ns.FUNCTION_CHECKS = {
     -- build / combat
     "GetBuildInfo", "InCombatLockdown", "UnitAffectingCombat", "IsEncounterInProgress",
     -- bags and bank
@@ -189,21 +274,29 @@ local FUNCTION_CHECKS = {
 }
 
 -- Secret-value API candidates (V-10). Names beyond issecretvalue are unconfirmed guesses.
-local SECRET_CHECKS = {
+ns.SECRET_CHECKS = {
     "issecretvalue", "issecrettable", "canaccessvalue", "canaccesstable",
     "canaccessallvalues", "hasanysecretvalues", "scrubsecretvalues",
 }
 
 -- Classic-only globals we expect to be ABSENT on the Mainline API.
-local CLASSIC_CHECKS = {
+ns.CLASSIC_CHECKS = {
     "GetTradeSkillInfo", "GetNumTradeSkills", "GetTradeSkillReagentInfo", "GetCraftInfo",
     "GetContainerItemInfo", "GetContainerNumSlots",
 }
 
 -- Namespaces whose full key lists are recorded, so real function names are visible.
-local NAMESPACES = {
+ns.NAMESPACES = {
     "C_TradeSkillUI", "C_Item", "C_Container", "C_Bank", "C_EquipmentSet", "C_ChatInfo", "C_PlayerInfo",
 }
+
+--- Appends every item of items to the list named listName on ns.
+function ns.Extend(listName, items)
+    local list = ns[listName]
+    for _, item in ipairs(items) do
+        list[#list + 1] = item
+    end
+end
 
 local function checkPaths(paths)
     local result = {}
@@ -228,11 +321,11 @@ end
 local function runStatic()
     local static = { at = time() }
     static.buildInfo = probeCall("GetBuildInfo")
-    static.functions = checkPaths(FUNCTION_CHECKS)
-    static.secretApis = checkPaths(SECRET_CHECKS)
-    static.classicGlobals = checkPaths(CLASSIC_CHECKS)
+    static.functions = checkPaths(ns.FUNCTION_CHECKS)
+    static.secretApis = checkPaths(ns.SECRET_CHECKS)
+    static.classicGlobals = checkPaths(ns.CLASSIC_CHECKS)
     static.namespaces = {}
-    for _, name in ipairs(NAMESPACES) do
+    for _, name in ipairs(ns.NAMESPACES) do
         local namespace = resolve(name)
         static.namespaces[name] = type(namespace) == "table" and sortedKeys(namespace) or type(namespace)
     end
@@ -288,7 +381,7 @@ local function runProf(maxDeep)
         db.prof = { at = time(), error = "C_TradeSkillUI missing" }
         return
     end
-    local prof = { at = time(), inEncounter = inEncounter }
+    local prof = { at = time(), inEncounter = state.inEncounter }
     prof.isReady = probeCall("C_TradeSkillUI.IsTradeSkillReady")
     prof.baseProfession = probeCall("C_TradeSkillUI.GetBaseProfessionInfo")
     prof.childProfession = probeCall("C_TradeSkillUI.GetChildProfessionInfo")
@@ -332,7 +425,7 @@ local function runProf(maxDeep)
 end
 
 ---------------------------------------------------------------------------
--- Item, gear, sets and bag dumps (V-04, V-05, bank layout for M3)
+-- Item, gear, sets and bag dumps (V-04, V-05, bank layout)
 ---------------------------------------------------------------------------
 
 local function itemReport(itemRef)
@@ -427,27 +520,25 @@ end
 -- Comms test (V-08, V-09)
 ---------------------------------------------------------------------------
 
-local function groupChannel()
-    local isInGroup = resolve("IsInGroup")
-    local isInRaid = resolve("IsInRaid")
+--- Returns the group chat channel for add-on pings, or nil when solo.
+function ns.GroupChannel()
     local instanceCategory = resolve("LE_PARTY_CATEGORY_INSTANCE")
-    if type(isInGroup) ~= "function" then
-        return nil
-    end
-    if instanceCategory and isInGroup(instanceCategory) then
+    if instanceCategory and ns.CallIsTrue("IsInGroup", instanceCategory) then
         return "INSTANCE_CHAT"
-    elseif type(isInRaid) == "function" and isInRaid() then
+    elseif ns.CallIsTrue("IsInRaid") then
         return "RAID"
-    elseif isInGroup() then
+    elseif ns.CallIsTrue("IsInGroup") then
         return "PARTY"
     end
     return nil
 end
 
 local function runPing()
-    pingSeq = pingSeq + 1
-    local channel = groupChannel()
-    local ping = { at = time(), t = GetTime(), seq = pingSeq, inEncounter = inEncounter, channel = channel or "none" }
+    state.pingSeq = state.pingSeq + 1
+    local pingSeq = state.pingSeq
+    local channel = ns.GroupChannel()
+    local ping = { at = time(), t = GetTime(), seq = pingSeq, inEncounter = state.inEncounter,
+        ctx = ns.Context(), channel = channel or "none" }
     local payload = "PING:" .. pingSeq
     if channel then
         ping.addonMessage = probeCallSafe("C_ChatInfo.SendAddonMessage", ADDON_MSG_PREFIX, payload, channel)
@@ -462,39 +553,42 @@ local function runPing()
         ping.note = "not in a group: add-on message whispered to self, no chat line sent"
     end
     db.pings[#db.pings + 1] = ping
-    out(string.format("Ping %d sent on %s%s.", pingSeq, ping.channel, inEncounter and " (in encounter)" or ""))
+    out(string.format("Ping %d sent on %s%s.", pingSeq, ping.channel, state.inEncounter and " (in encounter)" or ""))
 end
 
 ---------------------------------------------------------------------------
--- Event recorder (V-03, V-06..V-09)
+-- Event recorder (V-03, V-06..V-09; extended by Combat.lua and Actions.lua)
 ---------------------------------------------------------------------------
 
-local EVENTS = {
-    -- SPEC Section 8
-    "PLAYER_LOGIN", "PLAYER_LOGOUT", "BAG_UPDATE_DELAYED",
-    "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED",
-    "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "TRADE_SKILL_LIST_UPDATE",
-    "SKILL_LINES_CHANGED", "CHAT_MSG_SKILL",
-    "PLAYER_EQUIPMENT_CHANGED", "UPDATE_INVENTORY_DURABILITY", "GET_ITEM_INFO_RECEIVED",
-    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_LEVEL_UP",
-    -- Encounters and comms
-    "ENCOUNTER_START", "ENCOUNTER_END", "CHAT_MSG_ADDON",
-    "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER", "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER",
-    "CHAT_MSG_INSTANCE_CHAT", "CHAT_MSG_INSTANCE_CHAT_LEADER",
-    -- Candidates (unverified names; a failed registration is itself a finding)
-    "TRADE_SKILL_ITEM_CRAFTED_RESULT", "TRADE_SKILL_CRAFT_BEGIN", "NEW_RECIPE_LEARNED",
-    "UPDATE_TRADESKILL_CAST_STOPPED", "PLAYER_INTERACTION_MANAGER_FRAME_SHOW",
-    "BANK_TAB_SETTINGS_UPDATED", "EQUIPMENT_SETS_CHANGED",
-}
+local function recordHandlerError(key, err)
+    db.handlerErrors = db.handlerErrors or {}
+    ns.PushCapped(db.handlerErrors, { at = time(), key = key, error = tostring(err) }, HANDLER_ERROR_CAP)
+end
+ns.RecordError = function(key, err)
+    if db then
+        recordHandlerError(key, err)
+    end
+end
 
--- Registered for the player only, to avoid flooding with party/nameplate casts (D-008).
-local PLAYER_UNIT_EVENTS = {
-    "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",
-    "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_FAILED",
-}
-
-local function recordEvent(event, ...)
-    if not db or not db.recording then
+local function recordEvent(listener, ...)
+    if not db.recording then
+        return
+    end
+    local key = listener.key
+    local ctx = ns.Context()
+    db.eventCounts[key] = (db.eventCounts[key] or 0) + 1
+    local byContext = db.eventCountsByContext[ctx]
+    if not byContext then
+        byContext = {}
+        db.eventCountsByContext[ctx] = byContext
+    end
+    byContext[key] = (byContext[key] or 0) + 1
+    if listener.mode ~= "record" then
+        return
+    end
+    local seen = sessionCounts[key] or 0
+    sessionCounts[key] = seen + 1
+    if listener.cap and seen >= listener.cap then
         return
     end
     local n = select("#", ...)
@@ -503,86 +597,189 @@ local function recordEvent(event, ...)
         local ok, info = pcall(classify, (select(i, ...)))
         args[i] = ok and info or { error = "classify failed" }
     end
-    local events = db.events
-    events[#events + 1] = { at = time(), t = GetTime(), event = event, inEncounter = inEncounter, n = n, args = args }
-    if #events > EVENT_CAP then
-        table.remove(events, 1)
-    end
-    db.eventCounts[event] = (db.eventCounts[event] or 0) + 1
-end
-
-local frame = CreateFrame("Frame")
-
-local function tryRegister(event, unit)
-    local ok, err
-    if unit then
-        ok, err = pcall(frame.RegisterUnitEvent, frame, event, unit)
-    else
-        ok, err = pcall(frame.RegisterEvent, frame, event)
-    end
-    registrations[event] = ok and true or tostring(err)
+    ns.PushCapped(db.events, { at = time(), t = GetTime(), event = key, inEncounter = state.inEncounter,
+        ctx = ctx, n = n, args = args }, EVENT_CAP)
 end
 
 local function initDB()
     WarriorWorkshopProbeDB = WarriorWorkshopProbeDB or {}
     db = WarriorWorkshopProbeDB
+    ns.db = db
     db.probeVersion = ns.PROBE_VERSION
     if db.recording == nil then
         db.recording = true
     end
     db.events = db.events or {}
     db.eventCounts = db.eventCounts or {}
+    db.eventCountsByContext = db.eventCountsByContext or {}
     db.items = db.items or {}
     db.pings = db.pings or {}
     db.sessions = db.sessions or {}
     db.registrations = registrations
-    db.sessions[#db.sessions + 1] = { at = time(), buildInfo = probeCall("GetBuildInfo") }
+    updateInstance()
+    state.inCombat = ns.CallIsTrue("InCombatLockdown") == true
+    db.sessions[#db.sessions + 1] = { at = time(), buildInfo = probeCall("GetBuildInfo"), ctx = ns.Context() }
+    for _, hook in ipairs(ns.onInit) do
+        local ok, err = pcall(hook, db)
+        if not ok then
+            recordHandlerError("onInit", err)
+        end
+    end
 end
 
-for _, event in ipairs(EVENTS) do
-    tryRegister(event)
-end
-for _, event in ipairs(PLAYER_UNIT_EVENTS) do
-    tryRegister(event, "player")
-end
+local frames = {} -- [unitsKey] = frame; unit-filtered events need their own frame per unit set
 
--- Register the prefix at load so CHAT_MSG_ADDON is delivered (D-009).
-local prefixRegistration = probeCallSafe("C_ChatInfo.RegisterAddonMessagePrefix", ADDON_MSG_PREFIX)
-
-frame:SetScript("OnEvent", function(_, event, ...)
-    -- Initialise on PLAYER_LOGIN (SavedVariables are loaded by then, and on every
-    -- /reload) so we never need to compare an ADDON_LOADED argument.
+local function onEvent(frame, event, ...)
+    -- Initialise on PLAYER_LOGIN (SavedVariables are loaded by then, and on every /reload) so we never need
+    -- to compare an ADDON_LOADED argument.
     if not db then
         if event ~= "PLAYER_LOGIN" then
             return
         end
         initDB()
-        db.prefixRegistration = prefixRegistration
+        db.prefixRegistration = ns.prefixRegistration
     end
-    -- Only the event NAME (our own string) is inspected; arguments are left untouched.
+    local listener = frame.listeners[event]
+    if not listener then
+        return
+    end
+    -- Only the event NAME (our own string) is inspected for state; arguments are left untouched.
     if event == "ENCOUNTER_START" then
-        inEncounter = true
+        state.inEncounter = true
+    elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+        updateInstance()
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        state.inCombat = true
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        state.inCombat = false
     end
-    recordEvent(event, ...)
+    recordEvent(listener, ...)
+    if listener.handler then
+        local ok, err = pcall(listener.handler, event, ...)
+        if not ok then
+            recordHandlerError(listener.key, err)
+        end
+    end
     if event == "ENCOUNTER_END" then
-        inEncounter = false
+        state.inEncounter = false
     end
-end)
+end
+
+local function getFrame(unitsKey)
+    local frame = frames[unitsKey]
+    if not frame then
+        frame = CreateFrame("Frame")
+        frame.listeners = {}
+        frame:SetScript("OnEvent", onEvent)
+        frames[unitsKey] = frame
+    end
+    return frame
+end
+
+--- Registers a game event with the recorder (D-008: every registration is pcall-wrapped and recorded).
+-- @param event string
+-- @param opts table|nil { units = { "player" [, "target"] } (unit filter, max two units),
+--   mode = "record" (default: classify args into db.events) | "count" (counts only),
+--   cap = number (max recorded per session), handler = function(event, ...) run after recording }
+-- @return string the registration key (event, or event@units)
+function ns.Listen(event, opts)
+    opts = opts or {}
+    local units = opts.units
+    local unitsKey = units and table.concat(units, ",") or ""
+    local key = units and (event .. "@" .. unitsKey) or event
+    local frame = getFrame(unitsKey)
+    local ok, err
+    if units then
+        ok, err = pcall(frame.RegisterUnitEvent, frame, event, units[1], units[2])
+    else
+        ok, err = pcall(frame.RegisterEvent, frame, event)
+    end
+    registrations[key] = ok and true or tostring(err)
+    frame.listeners[event] = { key = key, mode = opts.mode or "record", cap = opts.cap, handler = opts.handler }
+    return key
+end
+
+local EVENTS = {
+    -- Lifecycle and context
+    "PLAYER_LOGIN", "PLAYER_LOGOUT", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA",
+    -- Workshop (SPEC v0.1 Section 8)
+    "BAG_UPDATE_DELAYED", "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED",
+    "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "TRADE_SKILL_LIST_UPDATE",
+    "SKILL_LINES_CHANGED", "CHAT_MSG_SKILL",
+    "PLAYER_EQUIPMENT_CHANGED", "UPDATE_INVENTORY_DURABILITY", "GET_ITEM_INFO_RECEIVED",
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_LEVEL_UP",
+    -- Encounters and comms
+    "ENCOUNTER_START", "ENCOUNTER_END", "CHAT_MSG_ADDON",
+    -- Candidates (unverified names; a failed registration is itself a finding)
+    "TRADE_SKILL_ITEM_CRAFTED_RESULT", "TRADE_SKILL_CRAFT_BEGIN", "NEW_RECIPE_LEARNED",
+    "UPDATE_TRADESKILL_CAST_STOPPED", "PLAYER_INTERACTION_MANAGER_FRAME_SHOW",
+    "BANK_TAB_SETTINGS_UPDATED", "EQUIPMENT_SETS_CHANGED",
+}
+
+for _, event in ipairs(EVENTS) do
+    ns.Listen(event)
+end
+
+-- Registered for the player only, to avoid flooding with party/nameplate casts (D-008).
+for _, event in ipairs({ "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP",
+    "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_FAILED" }) do
+    ns.Listen(event, { units = { "player" } })
+end
+
+-- Register the prefix at load so CHAT_MSG_ADDON is delivered (D-009).
+ns.prefixRegistration = probeCallSafe("C_ChatInfo.RegisterAddonMessagePrefix", ADDON_MSG_PREFIX)
 
 ---------------------------------------------------------------------------
 -- Slash command
 ---------------------------------------------------------------------------
 
-local HELP = {
-    "/wwprobe - static API checks and summary",
-    "/wwprobe prof [n] - dump the open profession (first n recipes in full, default 10)",
-    "/wwprobe item <link> - dump item stats and info",
-    "/wwprobe gear - dump equipped items, durability and equipment sets",
-    "/wwprobe bags - dump bag/bank container layout (run once with the bank open)",
-    "/wwprobe ping - send an add-on message and a [WW:PING] chat line to your group",
-    "/wwprobe rec on|off - toggle the event recorder",
-    "/wwprobe clear - clear recorded events, items and pings",
-}
+local commands = {}
+local commandOrder = {}
+
+--- Adds a /wwprobe sub-command.
+-- @param name string first word after /wwprobe (lower case)
+-- @param run function(rest) rest is the remaining slash text (our own input)
+-- @param help string one help line
+function ns.AddCommand(name, run, help)
+    if not commands[name] then
+        commandOrder[#commandOrder + 1] = name
+    end
+    commands[name] = { run = run, help = help }
+end
+
+local function printHelp()
+    out("/wwprobe - static API checks and summary")
+    for _, name in ipairs(commandOrder) do
+        out(commands[name].help)
+    end
+end
+
+ns.AddCommand("prof", function(rest)
+    runProf(tonumber(rest) or DEFAULT_RECIPE_DUMPS)
+end, "/wwprobe prof [n] - dump the open profession (first n recipes in full, default 10)")
+ns.AddCommand("item", runItem, "/wwprobe item <link> - dump item stats and info")
+ns.AddCommand("gear", runGear, "/wwprobe gear - dump equipped items, durability and equipment sets")
+ns.AddCommand("bags", runBags, "/wwprobe bags - dump bag/bank container layout (run once with the bank open)")
+ns.AddCommand("ping", runPing, "/wwprobe ping - send an add-on message and a [WW:PING] chat line to your group")
+ns.AddCommand("rec", function(rest)
+    db.recording = rest:lower() ~= "off"
+    out("Recording " .. (db.recording and "on" or "off") .. ".")
+end, "/wwprobe rec on|off - toggle the event recorder")
+ns.AddCommand("clear", function()
+    db.events, db.eventCounts, db.eventCountsByContext, db.items, db.pings = {}, {}, {}, {}, {}
+    db.handlerErrors = nil
+    for key in pairs(sessionCounts) do
+        sessionCounts[key] = nil
+    end
+    for _, hook in ipairs(ns.onClear) do
+        local ok, err = pcall(hook, db)
+        if not ok then
+            recordHandlerError("onClear", err)
+        end
+    end
+    out("Cleared.")
+end, "/wwprobe clear - clear everything recorded (keeps settings such as the combat sampler switch)")
+ns.AddCommand("help", printHelp, "/wwprobe help - this list")
 
 SLASH_WWPROBE1 = "/wwprobe"
 SlashCmdList.WWPROBE = function(msg)
@@ -596,25 +793,16 @@ SlashCmdList.WWPROBE = function(msg)
 
     if command == "" then
         runStatic()
-    elseif command == "prof" then
-        runProf(tonumber(rest) or DEFAULT_RECIPE_DUMPS)
-    elseif command == "item" then
-        runItem(rest)
-    elseif command == "gear" then
-        runGear()
-    elseif command == "bags" then
-        runBags()
-    elseif command == "ping" then
-        runPing()
-    elseif command == "rec" then
-        db.recording = rest:lower() ~= "off"
-        out("Recording " .. (db.recording and "on" or "off") .. ".")
-    elseif command == "clear" then
-        db.events, db.eventCounts, db.items, db.pings = {}, {}, {}, {}
-        out("Cleared.")
-    else
-        for _, line in ipairs(HELP) do
-            out(line)
+        return
+    end
+    local entry = commands[command]
+    if entry then
+        local ok, err = pcall(entry.run, rest or "")
+        if not ok then
+            recordHandlerError("command:" .. command, err)
+            out("Command failed (recorded in handlerErrors): " .. tostring(err))
         end
+    else
+        printHelp()
     end
 end
