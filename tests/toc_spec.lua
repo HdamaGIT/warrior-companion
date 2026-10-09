@@ -56,8 +56,9 @@ for _, addon in ipairs(addons) do
     describe(addon.dir .. ".toc", function()
         local toc = parseToc(addon.dir .. "/" .. addon.dir .. ".toc")
 
-        it("declares a numeric Interface", function()
-            assert.is_truthy(toc.meta.Interface and toc.meta.Interface:match("^%d+$"))
+        it("declares a numeric Interface (or a comma-separated list of them)", function()
+            local interface = toc.meta.Interface
+            assert.is_truthy(interface and interface:match("^%d+$") or interface:match("^%d+[%d, ]*%d$"))
         end)
 
         it("declares its SavedVariables", function()

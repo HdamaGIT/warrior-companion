@@ -1,5 +1,6 @@
-## Interface: 120105
-# TODO [VERIFY V-01]: confirm with /dump select(4, GetBuildInfo()) and record as D-005.
+## Interface: 16001, 120105
+# TODO [VERIFY V-01]: 16001 is a guess from the beta client version 1.60.1 (Blizzard convention); 120105 is
+# Midnight 12.1.5. Confirm with /dump select(4, GetBuildInfo()) and record as D-005.
 ## Title: Warrior Workshop Probe
 ## Notes: Throwaway API probe for Warrior Workshop (M1 + M3). Disable after use.
 ## Author: Hugh

@@ -133,6 +133,12 @@ class LoadFailureTests(unittest.TestCase):
         self.assertTrue(any("out of date" in w for w in client.warnings))
         self.assertEqual(client.get("FakeDB.loads"), 1)
 
+    def test_any_interface_in_a_comma_separated_list_counts(self):
+        client = sim.Client(scenario={"build": {"interface": 16001}})
+        self.addCleanup(client.close)
+        client.login()  # WarriorWorkshop.toc lists 16001, 120105
+        self.assertFalse([w for w in client.warnings if "out of date" in w], client.warnings)
+
 
 class DataApiTests(unittest.TestCase):
     def setUp(self):

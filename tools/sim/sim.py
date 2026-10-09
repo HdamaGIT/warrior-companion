@@ -218,7 +218,9 @@ class Client:
             if not (folder / relative).exists():
                 raise SimError(f"{name}.toc lists a file that does not exist: {relative}")
         interface = toc["meta"].get("Interface")
-        if interface and int(interface) != int(self.world["build"]["interface"]):
+        # The client accepts a comma-separated list of Interface numbers; any match loads the add-on.
+        accepted = {int(part) for part in interface.split(",") if part.strip()} if interface else set()
+        if accepted and int(self.world["build"]["interface"]) not in accepted:
             self.warnings.append(
                 f"{name} is out of date: .toc Interface {interface}, client {self.world['build']['interface']}"
             )
