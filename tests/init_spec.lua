@@ -32,10 +32,19 @@ describe("init", function()
         end)
 
         it("returns a named table and keeps registration order", function()
+            local before = #ns.modules -- Core modules (Context, SpellMap) register at load
             local first = ns:NewModule("Alpha")
             local second = ns:NewModule("Beta")
             assert.are.equal("Alpha", first.name)
-            assert.are.same({ first, second }, ns.modules)
+            assert.are.equal(first, ns.modules[before + 1])
+            assert.are.equal(second, ns.modules[before + 2])
+        end)
+
+        it("registers the Core modules in .toc order", function()
+            assert.are.equal("Context", ns.modules[1].name)
+            assert.are.equal("SpellMap", ns.modules[2].name)
+            assert.are.equal(ns.Context, ns:GetModule("Context"))
+            assert.are.equal(ns.SpellMap, ns:GetModule("SpellMap"))
         end)
 
         it("finds modules by name", function()

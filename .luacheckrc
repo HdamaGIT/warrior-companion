@@ -44,6 +44,8 @@ stds.wow = {
         -- Unit, inventory and item data (Adapter only)
         "UnitName", "UnitClass", "UnitLevel", "GetRealmName", "GetInventoryItemID", "GetInventoryItemLink",
         "GetInventoryItemDurability", "GetItemStats", "GetItemInfo", "IsUsableItem",
+        -- Context and SpellMap reads (Adapter only)
+        "IsInInstance", "UnitIsDeadOrGhost", "IsEncounterInProgress", "C_ChallengeMode", "C_Spell", "IsPlayerSpell",
     },
 }
 

@@ -41,7 +41,9 @@ end
 
 --- Builds a mock adapter. data (all optional): buildInfo, addonVersion, inCombat, bags, bank, equipped,
 -- durability, itemStats = { [link] = stats }, itemBasics = { [itemID] = basics }, usable = { [itemID] = bool },
--- openProfession, recipes, equipmentSets, playerMeta, time.
+-- openProfession, recipes, equipmentSets, playerMeta, time,
+-- zoneKind, groupKind, dead, encounter, challengeMode, spellIDs = { [name] = id }, knownSpells = { [id] = bool }.
+-- Fields can be changed on adapter.data after creation.
 function M.new(data)
     data = data or {}
     local adapter = {
@@ -52,6 +54,7 @@ function M.new(data)
         wallTime = data.time or 1700000000,
         timerSeq = 0,
         failAfter = false,
+        data = data,
     }
 
     function adapter.Print(msg)
@@ -104,6 +107,30 @@ function M.new(data)
     end
     function adapter.GetEquipmentSets()
         return deepCopy(data.equipmentSets)
+    end
+    function adapter.GetZoneKind()
+        return data.zoneKind or "openWorld"
+    end
+    function adapter.GetGroupKind()
+        return data.groupKind or "solo"
+    end
+    function adapter.IsPlayerDead()
+        return data.dead == true
+    end
+    function adapter.IsEncounterInProgress()
+        return data.encounter
+    end
+    function adapter.IsChallengeModeActive()
+        return data.challengeMode
+    end
+    function adapter.GetSpellIDByName(name)
+        return data.spellIDs and data.spellIDs[name]
+    end
+    function adapter.IsPlayerSpell(spellID)
+        if data.knownSpells == nil then
+            return true
+        end
+        return data.knownSpells[spellID] == true
     end
 
     -- Event frame: every call returns a new fake frame; the latest is adapter.frame.

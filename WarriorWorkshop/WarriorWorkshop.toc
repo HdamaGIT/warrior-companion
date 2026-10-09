@@ -1,13 +1,14 @@
 ## Interface: 120105
 # TODO [VERIFY V-01]: confirm with /dump select(4, GetBuildInfo()) in the Forever client and record as D-005.
 ## Title: Warrior Workshop
-## Notes: Cheapest next step to get stronger and level your professions. Warrior-focused.
+## Notes: Warrior combat companion, tank announcer and gear keybinds; professions planner to follow.
 ## Author: Hugh
 ## Version: 0.0.1
 ## SavedVariables: WarriorWorkshopDB
 ## SavedVariablesPerCharacter: WarriorWorkshopCharDB
 
-# Load order: Locale -> Core -> Modules -> UI
+# Load order: Locale -> Core -> Combat -> Announce -> Gear -> Modules -> UI
+# Core files that call ns:NewModule load after Core\Init.lua.
 Locale\enUS.lua
 Core\Util.lua
 Core\Log.lua
@@ -16,3 +17,5 @@ Core\Events.lua
 Core\Migrations.lua
 Core\DB.lua
 Core\Init.lua
+Core\Context.lua
+Core\SpellMap.lua

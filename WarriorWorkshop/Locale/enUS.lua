@@ -6,6 +6,7 @@ ns.L = L
 
 L.ADDON_TITLE = "Warrior Workshop"
 L.UNKNOWN = "unknown"
+L.NONE = "none"
 
 -- /ww version: title, add-on version, schema version, interface, build
 L.VERSION_LINE = "%s %s - schema %s - interface %s (build %s)"
@@ -25,6 +26,9 @@ L.EVENT_REGISTER_FAILED = "Could not register game event %s."
 L.HANDLER_MISSING = "Handler %s is missing for event %s."
 L.HANDLER_ERROR = "Error in %s handler for %s: %s"
 L.MODULE_ERROR = "Error in module %s during %s: %s"
+
+-- Spell map (debug): resolved count, registered count, unknown names
+L.SPELLMAP_REFRESHED = "Spell map: %d of %d abilities resolved; unknown: %s"
 
 -- Saved variables
 L.SCOPE_ACCOUNT = "account"

@@ -178,6 +178,98 @@ Adapter.GetPlayerMeta = guarded("GetPlayerMeta", function()
     return { name = UnitName("player"), realm = realm, classFile = classFile, level = UnitLevel("player") }
 end)
 
+-- Context reads (Core/Context.lua, SPEC_V2 §5.2) ----------------------------------------------------------
+-- These read zone, group and life state, not combat values, but each runs inside pcall (guarded) so an
+-- unexpected secret return becomes nil plus one warning instead of an error.
+
+--- Returns the player's zone kind.
+-- @return "instance" (party or raid instance) | "openWorld", or nil if IsInInstance is missing
+Adapter.GetZoneKind = guarded("GetZoneKind", function()
+    if type(IsInInstance) ~= "function" then
+        warnOnce("IsInInstance")
+        return nil
+    end
+    local inInstance, instanceType = IsInInstance()
+    if inInstance and (instanceType == "party" or instanceType == "raid") then
+        return "instance"
+    end
+    return "openWorld"
+end)
+
+--- Returns the player's group kind.
+-- @return "raid" | "party" | "solo", or nil if the group APIs are missing
+Adapter.GetGroupKind = guarded("GetGroupKind", function()
+    if type(IsInGroup) ~= "function" or type(IsInRaid) ~= "function" then
+        warnOnce("IsInGroup/IsInRaid")
+        return nil
+    end
+    if IsInRaid() then
+        return "raid"
+    elseif IsInGroup() then
+        return "party"
+    end
+    return "solo"
+end)
+
+--- Whether the player is dead or a ghost.
+-- @return boolean, or nil if UnitIsDeadOrGhost is missing
+Adapter.IsPlayerDead = guarded("IsPlayerDead", function()
+    if type(UnitIsDeadOrGhost) ~= "function" then
+        warnOnce("UnitIsDeadOrGhost")
+        return nil
+    end
+    return UnitIsDeadOrGhost("player") and true or false
+end)
+
+--- Whether a boss encounter is in progress, used to seed Context after a /reload (D-033). [VERIFY V-06, V-21]
+-- @return boolean, or nil if IsEncounterInProgress is missing
+Adapter.IsEncounterInProgress = guarded("IsEncounterInProgress", function()
+    if type(IsEncounterInProgress) ~= "function" then
+        warnOnce("IsEncounterInProgress")
+        return nil
+    end
+    return IsEncounterInProgress() and true or false
+end)
+
+--- Whether a Mythic+ (challenge mode) run is active. Forever may not have Mythic+ at all. [VERIFY V-21]
+-- @return boolean, or nil if the API is missing (absence is expected; no warning)
+Adapter.IsChallengeModeActive = guarded("IsChallengeModeActive", function()
+    if not hasFunction(C_ChallengeMode, "IsChallengeModeActive") then
+        return nil
+    end
+    return C_ChallengeMode.IsChallengeModeActive() and true or false
+end)
+
+-- Spell map reads (Core/SpellMap.lua, SPEC_V2 §5.3) -------------------------------------------------------
+
+--- Resolves an ability name to a spellID. [VERIFY V-22] Name lookups may only work for spellbook spells.
+-- @param name string ability name in the game's spelling
+-- @return number spellID, or nil if unknown or the API is missing
+Adapter.GetSpellIDByName = guarded("GetSpellIDByName", function(name)
+    if not hasFunction(C_Spell, "GetSpellInfo") then
+        warnOnce("C_Spell.GetSpellInfo")
+        return nil
+    end
+    local info = C_Spell.GetSpellInfo(name)
+    if type(info) == "table" and type(info.spellID) == "number" then
+        return info.spellID
+    end
+    return nil
+end)
+
+--- Whether the player knows a spell. [VERIFY V-22]
+-- @param spellID number
+-- @return boolean, or nil if IsPlayerSpell is missing
+Adapter.IsPlayerSpell = guarded("IsPlayerSpell", function(spellID)
+    if type(IsPlayerSpell) ~= "function" then
+        warnOnce("IsPlayerSpell")
+        return nil
+    end
+    return IsPlayerSpell(spellID) and true or false
+end)
+
+-- Bags, bank, equipment -------------------------------------------------------------------------------------
+
 local function scanContainers(bagIDs)
     local counts, totalSlots = {}, 0
     for _, bag in ipairs(bagIDs) do

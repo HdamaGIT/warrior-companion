@@ -14,6 +14,8 @@ H.CORE_FILES = {
     "Core/Migrations.lua",
     "Core/DB.lua",
     "Core/Init.lua",
+    "Core/Context.lua",
+    "Core/SpellMap.lua",
 }
 
 --- Loads one add-on file into ns.
@@ -47,13 +49,15 @@ function H.newNs(files, opts)
     return ns
 end
 
---- Core files up to and including DB.lua (everything except Init.lua, which writes slash-command globals).
+--- Core files up to and including DB.lua: everything before Init.lua, which writes slash-command globals and
+-- defines ns:NewModule (so the module files after it need it too).
 function H.pureFiles()
     local files = {}
     for _, relPath in ipairs(H.CORE_FILES) do
-        if relPath ~= "Core/Init.lua" then
-            files[#files + 1] = relPath
+        if relPath == "Core/Init.lua" then
+            break
         end
+        files[#files + 1] = relPath
     end
     return files
 end

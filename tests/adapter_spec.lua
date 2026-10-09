@@ -100,6 +100,13 @@ describe("adapter", function()
             assert.is_nil(Adapter.CreateEventFrame())
             assert.is_nil(Adapter.GetBuildInfo())
             assert.is_nil(Adapter.GetAddOnVersion())
+            assert.is_nil(Adapter.GetZoneKind())
+            assert.is_nil(Adapter.GetGroupKind())
+            assert.is_nil(Adapter.IsPlayerDead())
+            assert.is_nil(Adapter.IsEncounterInProgress())
+            assert.is_nil(Adapter.IsChallengeModeActive())
+            assert.is_nil(Adapter.GetSpellIDByName("Charge"))
+            assert.is_nil(Adapter.IsPlayerSpell(1))
         end)
 
         it("calls back with nil from GetItemBasics, exactly once", function()
@@ -303,6 +310,67 @@ describe("adapter", function()
             assert.is_true(Adapter.After(0.5, task))
             assert.are.equal(0.5, scheduled.delay)
             assert.are.equal(task, scheduled.fn)
+        end)
+
+        it("reads zone and group kinds", function()
+            local Adapter = loadAdapter({
+                IsInInstance = function()
+                    return true, "party"
+                end,
+                IsInGroup = function()
+                    return true
+                end,
+                IsInRaid = function()
+                    return false
+                end,
+            })
+            assert.are.equal("instance", Adapter.GetZoneKind())
+            assert.are.equal("party", Adapter.GetGroupKind())
+            local scenario = loadAdapter({
+                IsInInstance = function()
+                    return true, "scenario"
+                end,
+            })
+            assert.are.equal("openWorld", scenario.GetZoneKind())
+        end)
+
+        it("reads death, encounter and challenge-mode state as booleans", function()
+            local Adapter = loadAdapter({
+                UnitIsDeadOrGhost = function()
+                    return 1
+                end,
+                IsEncounterInProgress = function()
+                    return nil
+                end,
+                C_ChallengeMode = {
+                    IsChallengeModeActive = function()
+                        return true
+                    end,
+                },
+            })
+            assert.is_true(Adapter.IsPlayerDead())
+            assert.is_false(Adapter.IsEncounterInProgress())
+            assert.is_true(Adapter.IsChallengeModeActive())
+        end)
+
+        it("resolves spell names through C_Spell.GetSpellInfo", function()
+            local Adapter = loadAdapter({
+                C_Spell = {
+                    GetSpellInfo = function(name)
+                        if name == "Charge" then
+                            return { name = "Charge", spellID = 900100 }
+                        end
+                        return nil
+                    end,
+                },
+                IsPlayerSpell = function(spellID)
+                    return spellID == 900100
+                end,
+            })
+            assert.are.equal(900100, Adapter.GetSpellIDByName("Charge"))
+            assert.is_nil(Adapter.GetSpellIDByName("Unknown Ability"))
+            assert.is_true(Adapter.IsPlayerSpell(900100))
+            assert.is_false(Adapter.IsPlayerSpell(900101))
         end)
 
         it("reports player identity", function()
