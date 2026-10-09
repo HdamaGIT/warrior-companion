@@ -1,9 +1,13 @@
 ## Interface: 120105
 # TODO [VERIFY V-01]: confirm with /dump select(4, GetBuildInfo()) and record as D-005.
 ## Title: Warrior Workshop Probe
-## Notes: Phase 0 throwaway API probe for Warrior Workshop. Disable after use.
+## Notes: Throwaway API probe for Warrior Workshop (M1 + M3). Disable after use.
 ## Author: Hugh
-## Version: 0.1.0
+## Version: 0.2.0
 ## SavedVariables: WarriorWorkshopProbeDB
 
+# Bindings.xml is loaded automatically by the client.
 Probe.lua
+Dumps.lua
+Combat.lua
+Actions.lua

@@ -59,7 +59,11 @@ files["WarriorWorkshop/UI/*.lua"] = { std = "+wow" }
 
 files["WarriorWorkshopProbe/*.lua"] = {
     std = "+wow",
-    globals = { "WarriorWorkshopProbeDB", "SlashCmdList", "SLASH_WWPROBE1" },
+    globals = {
+        "WarriorWorkshopProbeDB", "SlashCmdList", "SLASH_WWPROBE1",
+        -- Bindings.xml (M3): header/name labels and the binding handler
+        "BINDING_HEADER_WWPROBE", "BINDING_NAME_WWPROBE_CHATKEY", "WWProbe_ChatKey",
+    },
 }
 
 files["tests/*.lua"] = { std = "+busted" }

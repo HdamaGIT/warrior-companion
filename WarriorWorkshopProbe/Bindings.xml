@@ -1,0 +1,6 @@
+<Bindings>
+	<!-- M3 probe (V-25 SAY from a key press, V-30 declared bindings). Loaded automatically; not listed in the .toc. -->
+	<Binding name="WWPROBE_CHATKEY" header="WWPROBE" category="ADDONS">
+		WWProbe_ChatKey()
+	</Binding>
+</Bindings>
