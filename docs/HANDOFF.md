@@ -1,61 +1,56 @@
-# Handoff: 2026-10-09: M2 Core
+# Handoff: 2026-10-09: SPEC_V2 adoption, M3 probe extension, M2 completed to SPEC_V2
 
 ## Session goal
-Build M2 (Core) from SPEC §11 ahead of the M1 probe run, at Hugh's explicit request: Init, event bus, DB with defaults, migrations, Log, Util, and the Adapter skeleton.
+Adopt `docs/SPEC_V2.md` (review, conflicts, challenges, plan approved by Hugh), then build **M3** (probe extension, urgent: must run in the beta before **21 Oct 2026**) and finish **M2** to the SPEC_V2 definition. Stop after both for Hugh's in-game run.
 
 ## Outcome
-**Achieved, pending human check.** M2 is built, luacheck is clean and busted is green on CI. The in-game check is `docs/verification/M2.md` ("reload persists settings"). **M0 and M1 in-game checks are still outstanding**, and the Adapter beyond M0's three functions is an **unverified skeleton** (D-015) until `docs/PROBE_RESULTS.md` is filled in. M3 has not been started and needs explicit approval.
+**Achieved, pending human check.** M3 and M2 are built and CI is green (see verification below). Nothing has run in Forever yet: the M0, M1, M2 and M3 in-game checks are all outstanding, and **one combined beta session** covers them (script at the end of `docs/PROBE_RESULTS.md`). M4 and later have not been started.
 
-## What was read
-`CLAUDE.md`, SPEC §5, §6, §7.5 to §7.9, §8, `docs/DECISIONS.md`, the previous handoff, `.luacheckrc`, `.busted`, `.github/workflows/ci.yml`, `tests/toc_spec.lua` and every file under `WarriorWorkshop/`.
+**`CLAUDE.md` is updated but NOT committed:** Hugh asked to see the diff first. Commit it with `docs: update CLAUDE.md for SPEC_V2` once approved.
 
-## What was changed
-- `WarriorWorkshop/Core/Util.lua`: `DeepCopy`, `MergeDefaults`, `RingPush`, `Trim`, `Split`, `FormatMoney` (pure).
-- `WarriorWorkshop/Core/Log.lua`: `Debug`, `WarnOnce`, `IsDebug`, `SetDebug`, `ToggleDebug`. Output via `ns.Adapter.Print`; flag in `settings.debug`.
-- `WarriorWorkshop/Core/Adapter.lua`: full SPEC §5.3 surface plus `Time`, `Now`, `After`, `CreateEventFrame`, `GetPlayerMeta`, and the pure `NormaliseStats` with the `STAT_KEYS` table. Every API is existence-checked, wrapped in `pcall`, returns `nil` and warns once on failure, and is tagged `[VERIFY V-0x]`. The header says there are no probe findings.
-- `WarriorWorkshop/Core/Events.lua`: `On`, `Off`, `Fire`, `Dispatch`, `Debounce`. Lazy raw-event registration, `pcall` isolation, snapshot dispatch.
-- `WarriorWorkshop/Core/Migrations.lua`: `ACCOUNT` and `CHARACTER` lists (both empty at v1) and pure `Apply(db, migrations, target)`.
-- `WarriorWorkshop/Core/DB.lua`: `GetAccountDefaults`, `GetCharacterDefaults`, pure `Prepare`, `Init`, accessors, `UpdateMeta`, `StampLastSeen`. No globals touched.
-- `WarriorWorkshop/Core/Init.lua`: `ns:NewModule`, `ns:GetModule`, ADDON_LOADED / PLAYER_LOGIN / PLAYER_LOGOUT lifecycle, `/ww version` (real schema) and `/ww debug`.
-- `WarriorWorkshop/Locale/enUS.lua`: new strings. `WarriorWorkshop.toc`: Locale, Util, Log, Adapter, Events, Migrations, DB, Init.
-- `.luacheckrc`: extra read-only WoW names for the Adapter (`C_Timer`, unit and inventory APIs); Init may also write the two SavedVariables.
-- Tests: `util`, `migrations`, `db`, `events`, `log`, `adapter`, `init` (incl. the no-globals-leak test) specs; real `tests/helpers/mock_adapter.lua` (fake frame, manual timer) and `tests/helpers/load_addon.lua`; fixtures `item_stats.lua`, `saved_account.lua`; `toc_spec.lua` also checks the Core load order.
-- Docs: D-012 to D-015, `docs/verification/M2.md`, README status. `docs/verification/M0.md` step 4 wording updated (schema is now `1`).
-- `.github/workflows/ci.yml`: fixed a raw newline in the simulator notice step that made the whole workflow invalid (GitHub ran zero jobs). That step came from the simulator commit, not from M2.
+## What was done
+- **Docs:** `SPEC.md` has the superseded banner (`SPEC_LEVELLING.md`/`SPEC_LEVELING.md` is not in the repo; nothing to banner). `SPEC_V2.md` and `IDEAS_BACKLOG.md` are committed. `DECISIONS.md`: SPEC_V2's D-006..D-018 recorded as **D-016..D-028** (mapping in D-030), D-004 marked amended by D-017, plus D-029 (SPEC_V2 errata), D-031 (build order), D-032 (probe design), D-033 (restricted detection), and proposals **P-1..P-8** awaiting Hugh. README points at SPEC_V2. `PROBE_RESULTS.md` has V-11..V-33 (V-20 retired), the decision gate table, and the combined beta run script. New `docs/verification/M3.md`; `M2.md` rewritten for schema 2; `M0.md` schema number updated.
+- **M3 probe (version 2):** `Probe.lua` refactored (`ns.Listen` with record/count modes, per-session caps and unit-filtered frames; `ns.AddCommand`; context flag; `CallIsTrue`/`SafeFirst`/`After` helpers; all handlers and timers in `pcall`, errors to `handlerErrors`). New `Dumps.lua` (spells, trainer incl. auto on `TRAINER_SHOW`, tank), `Combat.lua` (0.25s sampler aggregated per field and context, usability transitions, CLEU capped 300/session + 150 misses, `UNIT_COMBAT` fallback, nameplates, trigger-event counts), `Actions.lua` (chat via timer judged by echoes and `ADDON_ACTION_BLOCKED`, `chatkey` via `Bindings.xml`, sets, swapbtn on `CTRL-SHIFT-F9` without `SaveBindings`, macro, status), `Bindings.xml`. `tests/probe_spec.lua` plus `tests/helpers/probe_client.lua` (fake client in full, missing, secret and no-checker modes).
+- **M2 to SPEC_V2:** schema v2 defaults and v1→v2 migrations (`hideInCombat`→`hideMainInCombat`; v1 `gear` weights → `advisor`); `Core/Context.lua` and `Core/SpellMap.lua` stubs with new guarded Adapter reads (`GetZoneKind`, `GetGroupKind`, `IsPlayerDead`, `IsEncounterInProgress`, `IsChallengeModeActive`, `GetSpellIDByName`, `IsPlayerSpell`); `[VERIFY]` tags corrected; `GetEquipmentSets` returns `id`/`icon`; Workshop placeholders moved to the SPEC_V2 layout. Simulator fakes for the new APIs (ASSUMED where unconfirmed) plus two end-to-end sim tests.
 
 ## Verification state (pasted, not recalled)
-No local Lua toolchain, so **CI is the verifier**. CI run **37879401020** on commit `1563571`, annotations fetched via the GitHub API:
+CI is the verifier for luacheck (no local luacheck). Local checks used lupa's Lua 5.1 with a busted-compatible shim in the session scratchpad (not committed); CI's real busted is authoritative.
 ```
-conclusion: success
-luacheck:  Total: 0 warnings / 0 errors in 41 files
-busted:    ok=119 not_ok=0 3 pending   (3 pending = planner, gear, readiness placeholders)
-simulator: Ran 26 tests in 0.036s OK
+CI run 37974376379 on 0f554e5: conclusion success
+luacheck:  Total: 0 warnings / 0 errors in 51 files
+busted:    ok=191 not_ok=0 3 pending   (3 pending = planner, advisor, readiness placeholders)
+simulator: Ran 28 tests in 0.070s OK
+local shim (lupa Lua 5.1): TOTAL ok=188 fail=0 pending=3
 ```
-The first M2 run (`afc5d15`) was also green (busted 119 ok, luacheck 0/0 in 35 files). Run 37879357085 failed only because of the invalid `ci.yml` described above.
+CI was red between `1218551` and `52ecc92` (three placeholder comment lines over 120 characters), fixed in `0f554e5`.
 
-## Git state
-Branch `main`, pushed to `origin/main`. `docs/SPEC_LEVELING.md` is staged in the index (`AM`) by something outside this session and was deliberately left out of every commit. `tools/sim/` was committed by the simulator work (b55ce19, b344f2a), also not by this session.
+## Assumptions (logged here, not asked)
+- M3 was built before finishing M2 (D-031); both landed this session.
+- Probe: swap key `CTRL-SHIFT-F9`; chat text `[WWPROBE test]`; caps per D-032; ability names use the game's US spellings ("Demoralizing Shout", "Sunder Armor").
+- HUD default positions in schema v2 (`alertStrip` y = -150, `bigAlert` y = 120, `combatText` y = 40, `badges` y = -200, all `CENTER`) are placeholders until `/ww unlock` exists (M5).
+- `announce.events`, `combat.ruleOverrides` and `combat.spellOverrides` default to empty tables. SPEC_V2 §6 is compatible with sparse overrides (P-4 is not confirmed yet).
+- `gear.sets[].key` / `weaponSwaps[].key` are not in the defaults: both start as empty tables, so P-5 stays open.
+- SpellMap listens to `SPELLS_CHANGED` only (debounced 0.5s), not `LEARNED_SPELL_IN_TAB`, whose name may have changed in 11.x; the probe records both registrations.
+- Context `group` is `solo`/`party`/`raid` only; the LFG-group distinction for `INSTANCE_CHAT` routing waits for P-3 (M7).
+- A migrated v1 account keeps `window.tab = "planner"`; the M6 UI must fall back when a saved tab does not exist.
 
-## Decisions
-D-012 backup inside the SavedVariables table; D-013 event frame and timer come from the Adapter; D-014 planner odds settings in schema v1; D-015 M2 built before the probe, Adapter is unverified. (The plan named these D-011 to D-014; D-011 was taken by the simulator decision, so they were shifted by one.)
+## Open questions for Hugh
+1. Approve the `CLAUDE.md` diff (shown in the session summary), then commit it.
+2. Confirm or reject proposals **P-1..P-8** in `docs/DECISIONS.md` (they affect M5–M8).
+3. Agree the SPEC_V2 errata (D-029) so `SPEC_V2.md` §18, the header and §6 can be corrected in a `docs:` commit.
 
-**Assumptions:**
-- `settings.window` defaults to `CENTER`, 0, 0, 640x480, tab `planner` (SPEC lists only the field names).
-- An empty saved table is treated as first run; a non-empty table without a numeric `schemaVersion` is corrupt and is backed up.
-- Migrations are split into `ACCOUNT` and `CHARACTER` lists, because the two tables version independently.
-- `Events:Debounce` is trailing-edge from the first call (no restart on later calls), and later calls replace the stored function.
-- Bag IDs `0..5`, bank IDs `-1, 6..12`, equipment slots `1..19` are guesses. The bank is treated as closed when its containers report zero slots.
-- `ITEM_MOD_*` table lists both `_SHORT` and bare spellings; armour is read from `RESISTANCE0_NAME`; `weaponSpeed` has no mapping yet.
-- `Adapter.IsUsableByPlayer` uses `C_Item.IsUsableItem`, which may mean "has a use effect" rather than "equippable". Revisit with V-06.
+## Notes for M5 (from the simulator session, 9 Oct)
+- Hugh approved a **visual preview** of UI frames, rendered from the simulator into HTML, starting with the first UI milestone (M5 HUD under D-031). Build frames from plain `CreateFrame` + `SetPoint`/`SetSize`/FontStrings/textures, with minimal Blizzard templates; keep HUD layout in data; drive the 0.2s ticker through the Adapter/C_Timer (no `OnUpdate`), so the simulator clock can run it. **Tell Hugh when M5 UI work starts** so the preview can be built alongside.
+- Consider building the M5 replay harness on `tools/sim` (replaying a recorded stream through `Client.fire`/`advance`) and adding a secret-value fake to `tools/sim/lua/api.lua`; record the choice as a decision. `tests/helpers/probe_client.lua` already has a secret proxy that can be reused.
+- As Adapter functions go live, add an ASSUMED fake in `tools/sim/lua/api.lua` and an end-to-end test in `WarriorWorkshopTests`; scenario IDs are fake (9xxxxx).
 
-## Open items / known issues
-- M0 and M1 in-game checks, and filling `docs/PROBE_RESULTS.md`, are outstanding. Once the results arrive, revise the Adapter (all `[VERIFY]` tags) and record D-005.
-- Warnings like `API unavailable: ...` in chat at the first M2 login are expected findings, not bugs. Paste them back.
-- Carried from before: `/ww ready` has two meanings in SPEC §7.9 (M6/M8); the Midnight bank layout may differ (M3); the `leafo/gh-actions-*` Node 20 deprecation and the `ubuntu-latest` move on 19 Oct 2026.
-- Idea (not built): flag gear profiles as `placeholder = true` so the UI can label them until edited.
+## Other open items
+- After the beta run: fill in `PROBE_RESULTS.md` V-01..V-33 and the decision gate, record D-005 (interface, folder), revise the Adapter `[VERIFY]` functions, and turn probe logs into replay fixtures.
+- Carried: the `leafo/gh-actions-*` Node 20 deprecation and the `ubuntu-latest` move to Ubuntu 26 on 19 Oct 2026 (CI annotations).
+- `sim-save/` (untracked, from a simulator run outside this session) was left alone.
 
-## Progress doc position
-No PROGRESS or STATUS doc exists; the `README.md` status table is the progress view (M0 and M1 built, M2 built, all awaiting in-game checks).
+## Next step
+Hugh runs the combined beta script (`docs/PROBE_RESULTS.md`, "Beta run script"; checklist `docs/verification/M3.md`, plus `M0.md` and `M2.md`) **before 21 October**, then pastes back the files listed under "Finish".
 
 ## Suggested next prompt
-> Read CLAUDE.md, docs/HANDOFF.md, docs/DECISIONS.md and docs/PROBE_RESULTS.md. Here are my M2 checklist results (and any M0/M1 results and probe SavedVariables): <paste>. Fix anything M2 turned up, fill in docs/PROBE_RESULTS.md, and revise the Adapter `[VERIFY]` functions against it, recording decisions. Don't start M3 until I approve it.
+> Read CLAUDE.md, docs/HANDOFF.md, docs/DECISIONS.md and docs/PROBE_RESULTS.md. Here are my beta results: WarriorWorkshopProbe.lua <paste>, the second player's file <paste or "none">, WarriorWorkshop.lua (account and character) <paste>, client folder <name>, Lua errors <paste>, V-31 notes <notes>, and my answers on P-1..P-8 and the D-029 errata <answers>. Fill in PROBE_RESULTS.md and the decision gate, record the decisions, fix anything the run turned up, and revise the Adapter [VERIFY] functions. Don't start M5 until I approve it.

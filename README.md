@@ -10,11 +10,11 @@ Combat features run in the open world and on dungeon trash and suspend in restri
 |---|---|
 | M0 Scaffold | Built. Awaiting in-game load test ([checklist](docs/verification/M0.md)) |
 | M1 Probe | Built. Awaiting a beta run before 21 Oct 2026 ([checklist](docs/verification/M1.md)) |
-| M2 Core | Being extended to SPEC_V2 (schema v2, Context, SpellMap). Awaiting in-game check ([checklist](docs/verification/M2.md)) |
-| M3 Probe extension | In progress; must run in the beta before 21 Oct 2026 |
+| M2 Core | Built to SPEC_V2 (schema v2, Context, SpellMap stubs). Awaiting in-game check ([checklist](docs/verification/M2.md)) |
+| M3 Probe extension | Built. Must run in the beta before 21 Oct 2026 ([checklist](docs/verification/M3.md), [script](docs/PROBE_RESULTS.md#beta-run-script-m0-m1-m2-and-m3-together-run-before-21-october-2026)) |
 | M4-M9 | Not started (order per D-031: M5, M7, M4, M6, M8, M9) |
 
-At the moment the add-on loads, creates its saved variables and responds to `/ww version` and `/ww debug`.
+At the moment the add-on loads, creates (or migrates) its schema v2 saved variables, tracks play context and responds to `/ww version` and `/ww debug`.
 
 ## Repository layout
 
