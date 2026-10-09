@@ -21,3 +21,6 @@ busted.out
 sim.out
 __pycache__/
 *.pyc
+
+# Saved files collected from the game client by tools/wowdev.py (contain account and character names)
+beta-results/
