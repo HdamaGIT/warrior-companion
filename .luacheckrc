@@ -40,7 +40,10 @@ stds.wow = {
         "LE_PARTY_CATEGORY_INSTANCE", "SendChatMessage",
         -- Namespaces
         "C_AddOns", "C_ChatInfo", "C_Container", "C_EquipmentSet", "C_Item",
-        "C_TradeSkillUI", "Enum", "Item",
+        "C_TradeSkillUI", "C_Timer", "Enum", "Item",
+        -- Unit, inventory and item data (Adapter only)
+        "UnitName", "UnitClass", "UnitLevel", "GetRealmName", "GetInventoryItemID", "GetInventoryItemLink",
+        "GetInventoryItemDurability", "GetItemStats", "GetItemInfo", "IsUsableItem",
     },
 }
 
@@ -49,7 +52,7 @@ files["WarriorWorkshop/Core/Adapter.lua"] = { std = "+wow" }
 -- Init.lua may additionally register the slash command.
 files["WarriorWorkshop/Core/Init.lua"] = {
     std = "+wow",
-    globals = { "SlashCmdList", "SLASH_WW1" },
+    globals = { "SlashCmdList", "SLASH_WW1", "WarriorWorkshopDB", "WarriorWorkshopCharDB" },
 }
 
 files["WarriorWorkshop/UI/*.lua"] = { std = "+wow" }

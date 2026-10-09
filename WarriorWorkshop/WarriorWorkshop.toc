@@ -9,5 +9,10 @@
 
 # Load order: Locale -> Core -> Modules -> UI
 Locale\enUS.lua
+Core\Util.lua
+Core\Log.lua
 Core\Adapter.lua
+Core\Events.lua
+Core\Migrations.lua
+Core\DB.lua
 Core\Init.lua
