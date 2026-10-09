@@ -42,3 +42,19 @@ jobs:
             exit 1
           }
           echo "::notice title=busted::ok=$(grep -c '^ok' busted.out) not_ok=$(grep -c '^not ok' busted.out) $(grep -c '# SKIP' busted.out) pending"
+
+      - name: Set up Python (offline simulator)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Simulator tests
+        run: |
+          set -o pipefail
+          pip install -r tools/sim/requirements.txt
+          python -m unittest discover -s tools/sim/tests 2>&1 | tee sim.out || {
+            grep -E '^(FAIL|ERROR)' sim.out | sed 's/^/::error::/'
+            exit 1
+          }
+          echo "::notice title=simulator::$(grep -E '^(Ran|OK|FAILED)' sim.out | tr '
+' ' ')"

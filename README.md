@@ -24,6 +24,7 @@ At the moment the add-on only loads and responds to `/ww version`.
 | `WarriorWorkshopProbe/` | Phase 0 throwaway add-on that probes the Forever API |
 | `tests/` | busted unit tests (Lua 5.1) |
 | `docs/` | Spec, decisions, handoff, probe results, verification checklists |
+| `tools/sim/` | Offline client simulator: runs the add-on without the game ([setup](docs/DEV_SETUP.md#7-offline-simulator-no-game-needed)) |
 | `tools/analysis/` | Placeholder for the v2 Python pipeline |
 
 ## Development

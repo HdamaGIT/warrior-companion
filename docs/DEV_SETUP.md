@@ -86,3 +86,25 @@ busted
 ```
 
 A native Windows install also works (for example LuaRocks with a MinGW toolchain), but it is more fiddly, and `busted` needs a C compiler for its dependencies.
+
+## 7. Offline simulator (no game needed)
+
+`tools/sim/` runs the real add-on files in an embedded Lua 5.1 (via the `lupa` Python package) against a fake WoW client (D-011). It checks load order, events, timers, slash commands and the SavedVariables write/reload cycle. It also gives you a local Lua 5.1 without WSL.
+
+```powershell
+pip install -r tools/sim/requirements.txt
+python tools/sim/sim.py run "/ww version" "!reload" "/ww version"   # one-shot
+python tools/sim/sim.py repl --scenario miner                       # interactive
+python tools/sim/sim.py scenarios                                   # list worlds
+python -m unittest discover -s tools/sim/tests                      # simulator and add-on tests
+```
+
+Directives: `!fire EVENT args`, `!advance SECONDS`, `!combat on|off`, `!reload`, `!logout`, `!lua EXPR`. Use `--sv-dir DIR` to keep SavedVariables between runs, and `--addon NAME` to load other add-ons (for example `WarriorWorkshopProbe`).
+
+In Git Bash, set `MSYS_NO_PATHCONV=1` first, otherwise `"/ww"` is rewritten into a Windows path. PowerShell needs nothing.
+
+**What a pass means:** the code works against the simulator's fake client. It does **not** mean the Forever API behaves that way. Each fake in `tools/sim/lua/api.lua` is `KNOWN` (long-standing signature) or `ASSUMED` (unconfirmed); every run prints the `ASSUMED` ones the add-on used. When `docs/PROBE_RESULTS.md` confirms or contradicts a shape, update the fake and its tag in the same commit.
+
+**Extending it:** add a data API with `def("C_Foo.Bar", "ASSUMED", fn)` in `api.lua` when the Adapter starts using it, add world data to a scenario in `tools/sim/scenarios/`, and add an end-to-end test to `WarriorWorkshopTests` in `tools/sim/tests/test_sim.py`. Unknown PascalCase frame methods are silent no-ops (listed by `Client.stubbed_methods()`); unknown lowercase fields are `nil`, as on real frames.
+
+Not simulated: combat secret values, taint, protected-function rules, real skill-up randomness, the auction house, pixel layout.
