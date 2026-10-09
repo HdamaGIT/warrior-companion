@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
--- Event bus. Game events are received on one frame from the Adapter (D-012) and registered lazily on the
+-- Event bus. Game events are received on one frame from the Adapter (D-013) and registered lazily on the
 -- first subscription. Internal messages are prefixed WW_ and are never registered on the frame.
 local L = ns.L
 local Events = { subscribers = {}, rawRegistered = {}, pending = {} }

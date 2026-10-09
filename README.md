@@ -12,9 +12,10 @@ v1 will provide an inventory cache, a profession recipe cache, a skill-up planne
 |---|---|
 | M0 Scaffold | Built. Awaiting in-game load test ([checklist](docs/verification/M0.md)) |
 | M1 Probe | Built. Awaiting a beta run before 21 Oct 2026 ([checklist](docs/verification/M1.md)) |
-| M2+ | Not started |
+| M2 Core | Built (before the probe, so the Adapter is unverified). Awaiting in-game check ([checklist](docs/verification/M2.md)) |
+| M3+ | Not started |
 
-At the moment the add-on only loads and responds to `/ww version`.
+At the moment the add-on loads, creates its saved variables and responds to `/ww version` and `/ww debug`.
 
 ## Repository layout
 

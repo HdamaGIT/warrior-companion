@@ -27,7 +27,7 @@ local function tankWeights()
     }
 end
 
---- Returns a fresh copy of the account-wide defaults (SPEC 6, plus settings.planner per D-013).
+--- Returns a fresh copy of the account-wide defaults (SPEC 6, plus settings.planner per D-014).
 -- @return table
 function DB.GetAccountDefaults()
     return {
@@ -83,7 +83,7 @@ end
 
 local function reinitialise(raw, defaults, reason, now, previousVersion)
     local db = Util.DeepCopy(defaults)
-    -- D-011: the backup lives inside the saved-variables table, so it persists and adds no global.
+    -- D-012: the backup lives inside the saved-variables table, so it persists and adds no global.
     db._backup = { at = now, reason = reason, schemaVersion = previousVersion, data = raw }
     return db, { state = "backup", reason = reason }
 end

@@ -9,7 +9,7 @@ describe("db", function()
     end)
 
     describe("defaults", function()
-        it("account defaults follow SPEC 6 plus the planner settings (D-013)", function()
+        it("account defaults follow SPEC 6 plus the planner settings (D-014)", function()
             local account = DB.GetAccountDefaults()
             assert.are.equal(1, account.schemaVersion)
             assert.is_false(account.settings.debug)
@@ -136,7 +136,7 @@ describe("db", function()
             end)
         end)
 
-        it("backs up a database from a future version inside the table (D-011)", function()
+        it("backs up a database from a future version inside the table (D-012)", function()
             local raw = { schemaVersion = 99, settings = { debug = true }, keep = "me" }
             local db, status = prepareAccount(raw, nil, 777)
             assert.are.equal("backup", status.state)

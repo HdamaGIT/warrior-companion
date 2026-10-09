@@ -2,7 +2,7 @@ local addonName, ns = ...
 
 -- The ONLY file that calls Blizzard data APIs (D-002). SPEC 5.3 v1 surface.
 --
--- STATUS: UNVERIFIED SKELETON (D-014). M2 was built before the M1 probe was run, so there are NO probe
+-- STATUS: UNVERIFIED SKELETON (D-015). M2 was built before the M1 probe was run, so there are NO probe
 -- findings yet: every API choice below is the most likely Mainline (Midnight 12.x) call, not a confirmed one.
 -- Each function checks that the API exists, returns nil and warns once if not, and is tagged
 -- [VERIFY V-0x]. Revise against docs/PROBE_RESULTS.md once it is filled in.
