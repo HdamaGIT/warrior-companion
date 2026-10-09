@@ -1,26 +1,29 @@
 local addonName, ns = ...
 
--- The ONLY file that calls Blizzard data APIs (D-002). SPEC 5.3 v1 surface.
+-- The ONLY file that calls Blizzard data APIs (D-002). SPEC_V2 §5.4 surface (Workshop functions plus the Context
+-- and SpellMap reads; combat accessors arrive in M5).
 --
 -- STATUS: UNVERIFIED SKELETON (D-015). M2 was built before the M1 probe was run, so there are NO probe
 -- findings yet: every API choice below is the most likely Mainline (Midnight 12.x) call, not a confirmed one.
 -- Each function checks that the API exists, returns nil and warns once if not, and is tagged
--- [VERIFY V-0x]. Revise against docs/PROBE_RESULTS.md once it is filled in.
+-- [VERIFY V-xx] (or with the probe dump that will show the answer). Revise against docs/PROBE_RESULTS.md once
+-- it is filled in.
 local L = ns.L
 local Adapter = {}
 ns.Adapter = Adapter
 
 local CHAT_PREFIX = "|cffc79c6eWarrior Workshop|r: " -- warrior class colour
 
--- Equipment slots 1..19 (head .. tabard; includes ranged/relic slot). [VERIFY V-04]
+-- Equipment slots 1..19 (head .. tabard; includes ranged/relic slot). [VERIFY: /wwprobe gear]
 local FIRST_EQUIPPED_SLOT = 1
 local LAST_EQUIPPED_SLOT = 19
--- Backpack, four bags, reagent bag. [VERIFY V-04]
+-- Backpack, four bags, reagent bag. [VERIFY: /wwprobe bags]
 local BAG_IDS = { 0, 1, 2, 3, 4, 5 }
--- Bank container plus bank bag/tab containers. [VERIFY V-04] Midnight may have changed the bank layout.
+-- Bank container plus bank bag/tab containers. [VERIFY: /wwprobe bags at the bank] Midnight may have changed the
+-- bank layout (PROBE_RESULTS "Extras").
 local BANK_IDS = { -1, 6, 7, 8, 9, 10, 11, 12 }
 
---- Maps Blizzard ITEM_MOD_* keys to the internal stat keys (SPEC 5.4). [VERIFY V-06]
+--- Maps Blizzard ITEM_MOD_* keys to the internal stat keys (SPEC_V2 §5.6). [VERIFY V-04]
 -- Both the *_SHORT and bare spellings are listed because the exact keys returned are unconfirmed.
 Adapter.STAT_KEYS = {
     ITEM_MOD_STRENGTH_SHORT = "str",
@@ -133,7 +136,7 @@ function Adapter.Now()
     return GetTime()
 end
 
---- Schedules fn to run once after delaySeconds (C_Timer.After). [VERIFY V-04]
+--- Schedules fn to run once after delaySeconds (C_Timer.After).
 -- @param delaySeconds number
 -- @param fn function
 -- @return true if scheduled, nil if the timer API is missing
@@ -289,7 +292,7 @@ local function hasContainerApi()
     return hasFunction(C_Container, "GetContainerNumSlots") and hasFunction(C_Container, "GetContainerItemInfo")
 end
 
---- Counts items in the backpack and bags. [VERIFY V-04]
+--- Counts items in the backpack and bags. [VERIFY: /wwprobe bags]
 -- @return { [itemID] = count } or nil if the container API is missing
 Adapter.GetBagContents = guarded("GetBagContents", function()
     if not hasContainerApi() then
@@ -299,7 +302,7 @@ Adapter.GetBagContents = guarded("GetBagContents", function()
     return (scanContainers(BAG_IDS))
 end)
 
---- Counts items in the bank. [VERIFY V-04]
+--- Counts items in the bank. [VERIFY: /wwprobe bags at the bank]
 -- @return { [itemID] = count }, or nil if the bank reports no slots (assumed closed) or the API is missing
 Adapter.GetBankContents = guarded("GetBankContents", function()
     if not hasContainerApi() then
@@ -313,7 +316,7 @@ Adapter.GetBankContents = guarded("GetBankContents", function()
     return counts
 end)
 
---- Returns equipped items. [VERIFY V-05]
+--- Returns equipped items. [VERIFY: /wwprobe gear]
 -- @return { [slotID] = { itemID, link } } for filled slots, or nil if the API is missing
 Adapter.GetEquipped = guarded("GetEquipped", function()
     if type(GetInventoryItemID) ~= "function" or type(GetInventoryItemLink) ~= "function" then
@@ -330,7 +333,7 @@ Adapter.GetEquipped = guarded("GetEquipped", function()
     return equipped
 end)
 
---- Returns durability for equipped items that have it. [VERIFY V-05]
+--- Returns durability for equipped items that have it. [VERIFY: /wwprobe gear]
 -- @return { [slotID] = { cur, max } } or nil if the API is missing
 Adapter.GetDurability = guarded("GetDurability", function()
     if type(GetInventoryItemDurability) ~= "function" then
@@ -369,7 +372,7 @@ function Adapter.NormaliseStats(raw)
     return stats, unknown
 end
 
---- Returns the item's stats under internal keys (SPEC 5.4). Unknown raw keys are warned about once. [VERIFY V-06]
+--- Returns the item's stats under internal keys (SPEC_V2 §5.6). Unknown raw keys are warned about once. [VERIFY V-04]
 -- @param link string item link
 -- @return { [statKey] = number, other = table|nil }, or nil if no stats API exists or the item has no data
 Adapter.GetItemStats = guarded("GetItemStats", function(link)
@@ -412,7 +415,7 @@ local function readItemBasics(itemID)
     }, true
 end
 
---- Fetches item basics, asynchronously if the item is not cached. [VERIFY V-06]
+--- Fetches item basics, asynchronously if the item is not cached. [VERIFY V-04]
 -- @param itemID number
 -- @param cb function called exactly once with { name, link, quality, ilvl, reqLevel, equipLoc, classID,
 --   subClassID, sellPrice, icon } or nil if the data cannot be obtained
@@ -443,7 +446,7 @@ function Adapter.GetItemBasics(itemID, cb)
     cb(nil)
 end
 
---- Whether the player can use the item. [VERIFY V-06] C_Item.IsUsableItem may mean "has a use effect",
+--- Whether the player can use the item. [VERIFY V-04] C_Item.IsUsableItem may mean "has a use effect",
 -- not "equippable by class/level"; confirm and replace if needed.
 -- @param itemID number
 -- @return boolean, or nil if the API is missing
@@ -531,8 +534,8 @@ Adapter.GetKnownRecipes = guarded("GetKnownRecipes", function()
     return recipes
 end)
 
---- Returns saved equipment sets. [VERIFY V-05]
--- @return { [setName] = { [slotID] = itemID } }, or nil if the API is missing
+--- Returns saved equipment sets (Blizzard's Equipment Manager is the source of truth, D-025). [VERIFY V-05]
+-- @return { [setName] = { id = setID, icon = iconFileID|nil, [slotID] = itemID } }, or nil if the API is missing
 Adapter.GetEquipmentSets = guarded("GetEquipmentSets", function()
     if not (hasFunction(C_EquipmentSet, "GetEquipmentSetIDs") and hasFunction(C_EquipmentSet, "GetEquipmentSetInfo")
         and hasFunction(C_EquipmentSet, "GetItemIDs")) then
@@ -541,16 +544,16 @@ Adapter.GetEquipmentSets = guarded("GetEquipmentSets", function()
     end
     local sets = {}
     for _, setID in ipairs(C_EquipmentSet.GetEquipmentSetIDs() or {}) do
-        local name = C_EquipmentSet.GetEquipmentSetInfo(setID)
+        local name, icon = C_EquipmentSet.GetEquipmentSetInfo(setID)
         local items = C_EquipmentSet.GetItemIDs(setID)
         if name and type(items) == "table" then
-            local slots = {}
+            local set = { id = setID, icon = icon }
             for slot, itemID in pairs(items) do
-                if type(itemID) == "number" and itemID > 0 then
-                    slots[slot] = itemID
+                if type(slot) == "number" and type(itemID) == "number" and itemID > 0 then
+                    set[slot] = itemID
                 end
             end
-            sets[name] = slots
+            sets[name] = set
         end
     end
     return sets

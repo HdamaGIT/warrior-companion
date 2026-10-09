@@ -312,6 +312,29 @@ describe("adapter", function()
             assert.are.equal(task, scheduled.fn)
         end)
 
+        it("returns equipment sets by name with id, icon and item per slot (SPEC_V2 5.4)", function()
+            local Adapter = loadAdapter({
+                C_EquipmentSet = {
+                    GetEquipmentSetIDs = function()
+                        return { 3, 4 }
+                    end,
+                    GetEquipmentSetInfo = function(setID)
+                        return setID == 3 and "Tank" or "DPS", 130000 + setID, setID
+                    end,
+                    GetItemIDs = function(setID)
+                        if setID == 3 then
+                            return { [16] = 900011, [17] = 900012, [1] = 0 }
+                        end
+                        return { [16] = 900021 }
+                    end,
+                },
+            })
+            assert.are.same({
+                Tank = { id = 3, icon = 130003, [16] = 900011, [17] = 900012 },
+                DPS = { id = 4, icon = 130004, [16] = 900021 },
+            }, Adapter.GetEquipmentSets())
+        end)
+
         it("reads zone and group kinds", function()
             local Adapter = loadAdapter({
                 IsInInstance = function()
