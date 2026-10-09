@@ -1,0 +1,4 @@
+## Interface: 120105
+## Title: Error Addon
+boom.lua
+after.lua

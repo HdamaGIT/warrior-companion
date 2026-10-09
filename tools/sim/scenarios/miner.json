@@ -1,0 +1,18 @@
+{
+  "_comment": "Mid-levelling miner. Item IDs are fake test values (9xxxxx), not real Forever IDs.",
+  "player": { "level": 20 },
+  "money": 25000,
+  "items": {
+    "900001": { "name": "Test Copper Ore", "quality": 1, "stack": 20, "sellPrice": 10 },
+    "900002": { "name": "Test Copper Bar", "quality": 1, "stack": 20, "sellPrice": 40 }
+  },
+  "bags": {
+    "0": {
+      "slots": 16,
+      "items": {
+        "1": { "itemID": 900001, "count": 18 },
+        "2": { "itemID": 900002, "count": 4 }
+      }
+    }
+  }
+}
