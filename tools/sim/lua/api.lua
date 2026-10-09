@@ -63,6 +63,31 @@ return function(sim)
     end)
     def("IsInGroup", "KNOWN", function() return world.inGroup == true end)
     def("IsInRaid", "KNOWN", function() return world.inRaid == true end)
+    def("IsInInstance", "KNOWN", function()
+        local kind = world.instanceType or "none"
+        return kind ~= "none", kind
+    end)
+    def("UnitIsDeadOrGhost", "KNOWN", function(unit)
+        return unit == "player" and world.dead == true
+    end)
+
+    -- Encounters and spells (Context / SpellMap, M2). Spell IDs in scenarios are fake (9xxxxx).
+    def("IsEncounterInProgress", "ASSUMED", function() return world.encounter == true end)
+    def("C_Spell.GetSpellInfo", "ASSUMED", function(name)
+        local spellID = world.spells and world.spells[name]
+        if not spellID then
+            return nil
+        end
+        return { name = name, spellID = spellID, iconID = 0, castTime = 0, minRange = 0, maxRange = 0 }
+    end)
+    def("IsPlayerSpell", "ASSUMED", function(spellID)
+        for _, known in pairs(world.spells or {}) do
+            if known == spellID then
+                return true
+            end
+        end
+        return false
+    end)
 
     -- Containers (Midnight bank-tab layout is unconfirmed: bags here are plain numbered containers)
     def("C_Container.GetContainerNumSlots", "ASSUMED", function(bag)

@@ -192,6 +192,21 @@ class WarriorWorkshopTests(unittest.TestCase):
         self.client.reload()
         self.assertEqual(self.client.errors, [])
 
+    def test_login_reports_no_unavailable_core_apis(self):
+        # Context and SpellMap (M2) query zone, group, death and encounter state at login.
+        self.assertFalse([line for line in self.client.chat if "API unavailable" in line], self.client.chat)
+
+    def test_context_follows_combat_with_debug_on(self):
+        self.client.slash("/ww debug")
+        self.client.clear_chat()
+        self.client.set_combat(True)
+        self.client.set_combat(False)
+        lines = [line for line in self.client.chat if "[debug] context:" in line]
+        self.assertEqual(len(lines), 2, self.client.chat)
+        self.assertIn("combat=true", lines[0])
+        self.assertIn("combat=false", lines[1])
+        self.assertEqual(self.client.errors, [])
+
     def test_assumed_apis_used_are_visible(self):
         # Informational guard: if this list grows, the checks above rest on unverified fakes.
         self.assertIsInstance(self.client.assumed_apis_used(), list)
