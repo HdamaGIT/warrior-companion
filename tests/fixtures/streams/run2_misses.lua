@@ -1,0 +1,35 @@
+-- Beta run 2 (10 Oct 2026), fight 7 (GetTime 124096.262 = t 0). Thunder Clap (6343) pulls, Heroic Strike (284,
+-- rank 2) twice; a MISS on the player (incoming attack avoided) and, after combat, a MISS on the target (the
+-- player's attack missed). Each Heroic Strike is followed at the same timestamp by two target WOUNDs (0, then the hit).
+local SPELLS = { ["Thunder Clap"] = 6343, ["Heroic Strike"] = 284, ["Blood Fury"] = 20572 }
+return {
+    name = "run2_misses",
+    source = "beta run 2, fight 7 (GetTime 124096.262)",
+    start = { data = { spellIDs = SPELLS, secrecy = "run2", inCombat = false } },
+    events = {
+        { t = 0.000, event = "UNIT_SPELLCAST_SUCCEEDED", args = { "player", "Cast-3-0-0-0-6343-0", 6343 } },
+        { t = 0.000, event = "UNIT_COMBAT", args = { "target", "WOUND", "", 15, 1 } },
+        { t = 0.100, event = "PLAYER_REGEN_DISABLED", data = { inCombat = true } },
+        { t = 0.100, event = "ADDON_RESTRICTION_STATE_CHANGED", args = { 0, 1 } },
+        { t = 0.400, event = "UNIT_COMBAT", args = { "player", "WOUND", "", 7, 1 } },
+        { t = 1.334, event = "UNIT_SPELLCAST_SUCCEEDED", args = { "player", "Cast-3-0-0-0-20572-0", 20572 } },
+        { t = 3.003, event = "UNIT_COMBAT", args = { "player", "WOUND", "", 7, 1 } },
+        { t = 4.438, event = "PLAYER_ENTER_COMBAT" },
+        { t = 5.105, event = "UNIT_COMBAT", args = { "target", "WOUND", "", 27, 1 } },
+        { t = 5.255, event = "UNIT_COMBAT", args = { "target", "WOUND", "", 3, 1 } },
+        { t = 5.388, event = "UNIT_COMBAT", args = { "player", "WOUND", "", 6, 1 } },
+        { t = 7.340, event = "UNIT_SPELLCAST_SUCCEEDED", args = { "player", "Cast-3-0-0-0-284-0", 284 } },
+        { t = 7.340, event = "UNIT_COMBAT", args = { "target", "WOUND", "", 0, 1 } },
+        { t = 7.340, event = "UNIT_COMBAT", args = { "target", "WOUND", "", 45, 1 } },
+        { t = 7.624, event = "UNIT_COMBAT", args = { "player", "MISS", "", 0, 1 } },
+        { t = 8.341, event = "UNIT_COMBAT", args = { "target", "WOUND", "", 5, 4 } },
+        { t = 10.193, event = "UNIT_COMBAT", args = { "player", "WOUND", "", 6, 1 } },
+        { t = 10.276, event = "UNIT_SPELLCAST_SUCCEEDED", args = { "player", "Cast-3-0-0-0-284-1", 284 } },
+        { t = 10.276, event = "UNIT_COMBAT", args = { "target", "WOUND", "", 0, 1 } },
+        { t = 10.276, event = "UNIT_COMBAT", args = { "target", "WOUND", "", 44, 1 } },
+        { t = 10.493, event = "PLAYER_LEAVE_COMBAT" },
+        { t = 11.361, event = "ADDON_RESTRICTION_STATE_CHANGED", args = { 0, 0 } },
+        { t = 11.361, event = "PLAYER_REGEN_ENABLED", data = { inCombat = false } },
+        { t = 16.516, event = "UNIT_COMBAT", args = { "target", "MISS", "", 0, 1 } },
+    },
+}

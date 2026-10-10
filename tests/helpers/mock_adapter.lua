@@ -1,5 +1,7 @@
 -- Fake Adapter for module tests: same surface as WarriorWorkshop/Core/Adapter.lua, returning fixture
 -- tables, plus a fake event frame and a manual timer. No WoW globals are involved.
+local MockClock = dofile("tests/helpers/mock_clock.lua")
+
 local M = {}
 
 local function deepCopy(value)
@@ -49,10 +51,9 @@ function M.new(data)
     local adapter = {
         printed = {},
         frames = {},
-        timers = {},
-        clock = 0,
+        sounds = {},
+        clockObj = MockClock.new(data.now or 0),
         wallTime = data.time or 1700000000,
-        timerSeq = 0,
         failAfter = false,
         data = data,
     }
@@ -70,7 +71,7 @@ function M.new(data)
         return adapter.wallTime
     end
     function adapter.Now()
-        return adapter.clock
+        return adapter.clockObj.now
     end
     function adapter.InCombat()
         return data.inCombat == true
@@ -141,58 +142,204 @@ function M.new(data)
         return frame
     end
 
-    -- Fake timer. After() records; advance(dt) runs what has become due; flush() runs everything pending.
+    -- Fake timer on a manual clock (tests/helpers/mock_clock.lua). After() records; advance(dt) runs what has become
+    -- due; flush() runs everything pending.
     function adapter.After(delay, fn)
         if adapter.failAfter then
             return nil
         end
-        adapter.timerSeq = adapter.timerSeq + 1
-        adapter.timers[#adapter.timers + 1] = { due = adapter.clock + delay, seq = adapter.timerSeq, fn = fn }
+        adapter.clockObj.after(delay, fn)
         return true
     end
+    function adapter.advance(seconds)
+        adapter.clockObj.advance(seconds)
+    end
+    function adapter.flush()
+        adapter.clockObj.flush()
+    end
+    function adapter.pendingTimers()
+        return adapter.clockObj.pending()
+    end
 
-    -- Removes and returns the earliest timer due at or before limit (any timer if limit is nil).
-    local function popEarliest(limit)
-        local best
-        for index, timer in ipairs(adapter.timers) do
-            if limit == nil or timer.due <= limit then
-                local current = best and adapter.timers[best]
-                if not current or timer.due < current.due or (timer.due == current.due and timer.seq < current.seq) then
-                    best = index
-                end
+    M.installCombat(adapter)
+
+    return adapter
+end
+
+--- Installs the combat accessors (SPEC_V2 §5.4, D-048) on a mock adapter. They read adapter.data:
+--   combat = {
+--     rage, rageMax, health = { [unit] = 0..1 },
+--     usable = { [spellID] = bool }, noPower = { [spellID] = bool },
+--     cooldowns = { [spellID] = seconds remaining } (a spell in `usable` without an entry is ready: 0),
+--     inRange = { [spellID] = bool }, autoAttacking = bool,
+--     auras = { [unit] = { [auraName] = false | { stacks, expires, duration, fromPlayer } } }
+--       (expires is clock time; nil means permanent),
+--     target = { exists, hostile }, stance = { index, name },
+--   }
+--   secrecy = "none" (default) | "run2" | "all"
+--     "run2": what beta run 2 saw (D-044): rage and health always secret; in combat (data.inCombat) auras and
+--             cooldown times are secret (cooldown falls back to isActive: ready stays 0, cooling down is unknown).
+--     "all":  secret mode (SPEC_V2 §13): every combat accessor and normalised event returns nil.
+--   restriction = { encounter, challengeMode, pvpMatch }, spellNames = { [spellID] = name }.
+-- Unknown is nil throughout, as in the real Adapter.
+function M.installCombat(adapter)
+    local data = adapter.data
+
+    local function all()
+        return data.secrecy == "all"
+    end
+    local function run2()
+        return data.secrecy == "run2"
+    end
+    local function combat()
+        return data.combat or {}
+    end
+
+    function adapter.SetSecretFallback(assumeSecret)
+        adapter.secretFallback = assumeSecret
+    end
+
+    function adapter.GetRestrictionFlags()
+        local r = data.restriction or {}
+        return r.encounter == true, r.challengeMode == true, r.pvpMatch == true
+    end
+
+    function adapter.GetRage()
+        local c = combat()
+        if all() or run2() or c.rage == nil then
+            return nil
+        end
+        return c.rage, c.rageMax or 100
+    end
+
+    function adapter.GetHealthPct(unit)
+        local c = combat()
+        if all() or run2() or c.health == nil then
+            return nil
+        end
+        return c.health[unit]
+    end
+
+    function adapter.IsSpellUsable(spellID)
+        local c = combat()
+        local usable = c.usable and c.usable[spellID]
+        if all() or usable == nil then
+            return nil
+        end
+        return usable, (c.noPower and c.noPower[spellID]) == true
+    end
+
+    function adapter.GetSpellCooldownRemaining(spellID)
+        local c = combat()
+        if all() then
+            return nil
+        end
+        local remaining = c.cooldowns and c.cooldowns[spellID]
+        if remaining == nil then
+            if c.usable and c.usable[spellID] ~= nil then
+                remaining = 0
+            else
+                return nil
             end
         end
-        if best then
-            return table.remove(adapter.timers, best)
+        if run2() and data.inCombat and remaining > 0 then
+            return nil
+        end
+        return remaining
+    end
+
+    function adapter.IsSpellInRange(spellID, unit)
+        local c = combat()
+        if all() or unit ~= "target" or c.inRange == nil then
+            return nil
+        end
+        return c.inRange[spellID]
+    end
+
+    function adapter.IsAutoAttacking()
+        if all() then
+            return nil
+        end
+        return combat().autoAttacking
+    end
+
+    function adapter.GetAura(unit, auraName)
+        local c = combat()
+        if all() or (run2() and data.inCombat) then
+            return nil
+        end
+        local byUnit = c.auras and c.auras[unit]
+        if byUnit == nil then
+            return nil
+        end
+        local aura = byUnit[auraName]
+        if not aura then
+            return false
+        end
+        local remaining = math.huge
+        if aura.expires then
+            remaining = aura.expires - adapter.Now()
+            if remaining <= 0 then
+                return false
+            end
+        end
+        return aura.stacks or 0, remaining, aura.fromPlayer, aura.duration
+    end
+
+    function adapter.GetTargetState()
+        local target = combat().target
+        if all() or target == nil then
+            return nil
+        end
+        return target.exists == true, target.exists == true and target.hostile == true
+    end
+
+    function adapter.GetStance()
+        local stance = combat().stance
+        if all() or stance == nil then
+            return nil
+        end
+        return stance.index, stance.name
+    end
+
+    function adapter.GetSpellName(spellID)
+        if data.spellNames and data.spellNames[spellID] then
+            return data.spellNames[spellID]
+        end
+        for name, id in pairs(data.spellIDs or {}) do
+            if id == spellID then
+                return name
+            end
         end
         return nil
     end
 
-    function adapter.advance(seconds)
-        local target = adapter.clock + seconds
-        local timer = popEarliest(target)
-        while timer do
-            adapter.clock = math.max(adapter.clock, timer.due)
-            timer.fn()
-            timer = popEarliest(target)
+    function adapter.GetSpellIcon(spellID)
+        if type(spellID) ~= "number" then
+            return nil
         end
-        adapter.clock = target
+        return 130000 + spellID
     end
 
-    function adapter.flush()
-        local timer = popEarliest(nil)
-        while timer do
-            adapter.clock = math.max(adapter.clock, timer.due)
-            timer.fn()
-            timer = popEarliest(nil)
+    function adapter.PlaySound(kitName)
+        adapter.sounds[#adapter.sounds + 1] = kitName
+        return true
+    end
+
+    -- Normalised events (SPEC_V2 §5.5). Plain pass-through unless in secret mode.
+    function adapter.ReadUnitCombat(unit, action, descriptor, amount)
+        if all() then
+            return nil
         end
+        return unit, action, descriptor, amount
     end
 
-    function adapter.pendingTimers()
-        return #adapter.timers
+    function adapter.ReadSpellcast(unit, _, spellID)
+        if all() then
+            return nil
+        end
+        return unit, spellID
     end
-
-    return adapter
 end
 
 return M
