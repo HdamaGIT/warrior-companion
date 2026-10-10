@@ -1,4 +1,4 @@
-# Handoff: 2026-10-09: SPEC_V2 adoption, M3 probe extension, M2 completed to SPEC_V2
+# Handoff: 2026-10-10: beta run 2 analysed (after the 9 Oct SPEC_V2 adoption, M3 and M2)
 
 ## Session goal
 Adopt `docs/SPEC_V2.md` (review, conflicts, challenges, plan approved by Hugh), then build **M3** (probe extension, urgent: must run in the beta before **21 Oct 2026**) and finish **M2** to the SPEC_V2 definition. Stop after both for Hugh's in-game run.
@@ -34,8 +34,16 @@ CI was red between `1218551` and `52ecc92` (three placeholder comment lines over
 - Context `group` is `solo`/`party`/`raid` only; the LFG-group distinction for `INSTANCE_CHAT` routing is D-038 and is built in M7.
 - A migrated v1 account keeps `window.tab = "planner"`; the M6 UI must fall back when a saved tab does not exist.
 
+## Beta run 2 (10 Oct)
+Collected into `beta-results/2026-10-10_154007/`. Probe v3 worked: no popup at login, 893 combat samples, no handler or Lua errors. Client is now build 70338 (Interface still 16001).
+- **Headline:** open-world combat activates restriction type 0 ("Combat"). In combat, auras (by name: `nil`; by index: **error**), cooldown times, rage, health and target casting are secret. Usability, range, auto-attack, stance, target level/classification/reaction, threat, own `UNIT_SPELLCAST_*` and `UNIT_COMBAT` stay readable.
+- Results in `docs/PROBE_RESULTS.md` (Run 2 section, V-10..V-33 filled), gate filled. Decisions **D-044** (gate, provisional until the group run), **D-045** (restriction detection via `Enum.AddOnRestrictionType`; `C_Secrets` pre-check before aura reads), **D-046** (secure buttons: one click edge, idempotent swaps).
+- **Spec impact (proposal, not yet applied):** SPEC_V2 §5.5/§7.4 (avoidance on `UNIT_COMBAT`), §7.1 conditions (drop rage/health conditions; Battle Shout from own casts), §7.2/§7.3/§8.1 (R-06, R-11, A-08 No-go; U-01/R-03/A-01/A-04 Degraded). Needs Hugh's agreement before the `docs:` edit.
+- Not answered yet: V-31 built-ins (Hugh gave no notes), DODGE/BLOCK/RESIST in `UNIT_COMBAT`, target cast events (no caster fought), Overpower/Execute windows (not known at level 8), all group/instance/encounter items.
+
 ## Open questions for Hugh
-None. CLAUDE.md, the D-029 errata and P-1..P-8 (now D-036..D-043) were all approved on 9–10 Oct.
+1. Agree the SPEC_V2 revisions that follow from D-044/D-045 (listed under Beta run 2) so the spec can be edited before M5.
+2. V-31 notes on the built-ins (Cooldown Manager, floating combat text, swing timer, loss-of-control).
 
 ## Notes for M5 (from the simulator session, 9 Oct)
 - Hugh approved a **visual preview** of UI frames, rendered from the simulator into HTML, starting with the first UI milestone (M5 HUD under D-031). Build frames from plain `CreateFrame` + `SetPoint`/`SetSize`/FontStrings/textures, with minimal Blizzard templates; keep HUD layout in data; drive the 0.2s ticker through the Adapter/C_Timer (no `OnUpdate`), so the simulator clock can run it. **Tell Hugh when M5 UI work starts** so the preview can be built alongside.
@@ -48,7 +56,9 @@ None. CLAUDE.md, the D-029 errata and P-1..P-8 (now D-036..D-043) were all appro
 - `sim-save/` (untracked, from a simulator run outside this session) was left alone.
 
 ## Next step
-Hugh follows `docs/BETA_TESTING.md` (Stages 1–7) **before 21 October**, then says "beta run done"; run `python tools/wowdev.py collect` and read `beta-results/<latest>/`. The add-ons are already installed as junctions into `C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns` (beta client version 1.60.1.70291; both `.toc` files now list `## Interface: 16001, 120105`, where 16001 is a guess until V-01).
+1. Hugh agrees the spec revisions; Claude applies them in a `docs:` commit.
+2. **Beta run 3 before 21 Oct** (group, Stage 5 of `docs/BETA_TESTING.md`): party chat, Taunt until a resist, Challenging Shout/Shield Wall, a mob that **casts** (for R-11), dungeon trash and one boss. Ideally on a character that knows Overpower (level 12+).
+3. Then M5, with Hugh's approval.
 
 ## Suggested next prompt
-> Read CLAUDE.md, docs/HANDOFF.md, docs/DECISIONS.md and docs/PROBE_RESULTS.md. Beta run done: run `python tools/wowdev.py collect` and read the files. Interface number <N>, Lua errors <paste or none>, weapon/armour swap in combat <yes/no>, V-31 notes <notes>,. Fill in PROBE_RESULTS.md and the decision gate, record the decisions, fix anything the run turned up, and revise the Adapter [VERIFY] functions. Don't start M5 until I approve it.
+> Read CLAUDE.md, docs/HANDOFF.md, docs/DECISIONS.md and docs/PROBE_RESULTS.md. Beta run 3 done: run `python tools/wowdev.py collect` and read the files. Notes: <party chat / taunt resist / boss / Lua errors / V-31>. Update PROBE_RESULTS.md and the gate, record the decisions. Don't start M5 until I approve it.
