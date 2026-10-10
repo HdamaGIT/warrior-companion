@@ -215,12 +215,62 @@ def render(frames: list[dict], screen=(1920, 1080), title="Warrior Workshop", su
             layout.warnings.append(f"{label}: zero size")
         drawables.append((frame, rect, label, visible))
 
+    layout.warnings.extend(_overlaps(layout, drawables))
     full_view = Rect(0, 0, width, height)
     full = [_element(f, r, lbl, vis, full_view) for f, r, lbl, vis in drawables]
     close_view = _bounds([r for f, r, lbl, vis in drawables if vis], full_view)
     close = [_element(f, r, lbl, vis, close_view) for f, r, lbl, vis in drawables] if close_view else []
     warnings = sorted(set(layout.warnings))
     return _page(full, close, close_view, rows, warnings, screen, title, subtitle), warnings
+
+
+def _top_level(layout: Layout, frame: dict) -> dict | None:
+    """The ancestor (or the frame itself) whose parent is UIParent; None for parentless frames."""
+    while frame.get("parent"):
+        parent = layout.frames[frame["parent"]]
+        if parent.get("name") == "UIParent":
+            return frame
+        frame = parent
+    return None
+
+
+def _overlaps(layout: Layout, drawables) -> list[str]:
+    """Warns when visible pieces of two different UIParent children overlap.
+
+    Every visible frame belongs to its top-level container (the ancestor parented to UIParent).
+    Pieces are compared only across containers, so rows hanging outside their own container still
+    count against other containers, but a container is never compared with its own children.
+    Reports the largest overlap per pair of containers.
+    """
+    groups: dict[int, dict] = {}
+    for frame, rect, _, visible in drawables:
+        if not visible or rect.width <= 0 or rect.height <= 0:
+            continue
+        top = _top_level(layout, frame)
+        if top is None:
+            continue
+        group = groups.setdefault(top["id"], {"frame": top, "rects": [], "hint": None})
+        group["rects"].append(rect)
+        if not group["hint"] and frame.get("text"):
+            group["hint"] = _ESCAPES.sub("", frame["text"])
+
+    def name(group):
+        return layout.label(group["frame"]) + (f" (“{group['hint']}”)" if group["hint"] else "")
+
+    ordered = sorted(groups.values(), key=lambda g: g["frame"]["id"])
+    warnings = []
+    for i, a in enumerate(ordered):
+        for b in ordered[i + 1:]:
+            best = None
+            for ra in a["rects"]:
+                for rb in b["rects"]:
+                    w = min(ra.right, rb.right) - max(ra.left, rb.left)
+                    h = min(ra.top, rb.top) - max(ra.bottom, rb.bottom)
+                    if w > 0 and h > 0 and (best is None or w * h > best[0] * best[1]):
+                        best = (w, h)
+            if best:
+                warnings.append(f"{name(a)} overlaps {name(b)} by {best[0]:.0f}x{best[1]:.0f}")
+    return warnings
 
 
 def _bounds(rects: list[Rect], screen: Rect, margin: float = 24) -> Rect | None:

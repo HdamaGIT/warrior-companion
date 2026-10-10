@@ -64,6 +64,48 @@ class AnchorTests(unittest.TestCase):
         self.assertIn("&lt;b&gt;", out)
 
 
+class OverlapTests(unittest.TestCase):
+    """Overlap warnings compare UIParent children's visible footprints, never a container with its own rows."""
+
+    @staticmethod
+    def warnings(*frames):
+        _, warnings = preview.render([frame(1, name="UIParent"), *frames], screen=(1000, 500))
+        return [w for w in warnings if "overlaps" in w]
+
+    def box(self, id_, x, y, w=100, h=50, parent=1, **kw):
+        return frame(id_, parent=parent, width=w, height=h, points=[point("BOTTOMLEFT", x=x, y=y)], **kw)
+
+    def test_overlapping_containers_are_warned(self):
+        found = self.warnings(self.box(2, 0, 0), self.box(3, 50, 25))
+        self.assertEqual(found, ["Frame#2 overlaps Frame#3 by 50x25"])
+
+    def test_touching_containers_are_fine(self):
+        self.assertEqual(self.warnings(self.box(2, 0, 0), self.box(3, 100, 0)), [])
+
+    def test_children_never_overlap_their_own_container(self):
+        self.assertEqual(self.warnings(self.box(2, 0, 0), self.box(3, 10, 10, parent=2)), [])
+
+    def test_rows_hanging_outside_a_container_count_against_others(self):
+        container = self.box(2, 0, 200)                         # y 200..250
+        hanging = self.box(3, 0, -60, w=20, h=20, parent=2)     # y 140..160, below its container
+        other = self.box(4, 0, 150, w=50, h=50)                 # y 150..200, touches the container only
+        self.assertEqual(self.warnings(container, hanging, other), ["Frame#2 overlaps Frame#4 by 20x10"])
+
+    def test_empty_space_between_a_container_and_its_rows_is_not_an_overlap(self):
+        container = self.box(2, 0, 200)
+        hanging = self.box(3, 0, -100, w=20, h=20, parent=2)    # y 100..120
+        other = self.box(4, 50, 150, w=50, h=40)                # sits in the gap, clear of both pieces
+        self.assertEqual(self.warnings(container, hanging, other), [])
+
+    def test_hidden_frames_are_ignored(self):
+        self.assertEqual(self.warnings(self.box(2, 0, 0), self.box(3, 50, 25, visible=False)), [])
+
+    def test_text_hint_names_the_container(self):
+        label = self.box(4, 0, 0, w=40, h=12, parent=3, type="FontString", text="Execute")
+        found = self.warnings(self.box(2, 0, 0), self.box(3, 50, 25), label)
+        self.assertIn("“Execute”", found[0])
+
+
 class SnapshotTests(unittest.TestCase):
     def setUp(self):
         self.client = sim.Client(addons=["UiAddon"], addons_root=FIXTURES)
