@@ -600,15 +600,24 @@ end
 -- @return boolean
 Adapter.IsSecret = isSecret
 
--- Asks C_Secrets.<name>(arg) whether a family is secret right now. A missing function or an error counts as "not
--- known to be secret"; the per-value checks still apply.
-local function familySecret(name, arg)
+-- Asks C_Secrets.<name>(arg) whether a family is secret right now. If the function is missing or errors, the answer
+-- is `fallback`; the per-value checks still apply either way.
+local function familySecret(name, arg, fallback)
     local fn = type(C_Secrets) == "table" and C_Secrets[name]
     if type(fn) ~= "function" then
-        return false
+        return fallback == true
     end
     local ok, result = pcall(fn, arg)
-    return ok and result == true
+    if not ok then
+        return fallback == true
+    end
+    return result == true
+end
+
+-- Fallback for the aura and cooldown families when C_Secrets cannot answer (D-036): run 2 found both secret in
+-- combat, and an aura read by name then returns nil, which would look like "absent". So assume secret in combat.
+local function secretInCombat()
+    return Adapter.InCombat() == true
 end
 
 -- Reads tbl[key] and returns it only if readable.
@@ -703,7 +712,7 @@ function Adapter.GetSpellCooldownRemaining(spellID)
     if not ok or type(info) ~= "table" or isSecret(info) then
         return nil
     end
-    if not familySecret("ShouldCooldownsBeSecret") then
+    if not familySecret("ShouldCooldownsBeSecret", nil, secretInCombat()) then
         local start, duration, modRate = field(info, "startTime"), field(info, "duration"), field(info, "modRate")
         if start ~= nil and duration ~= nil then
             if start == 0 or duration == 0 then
@@ -757,7 +766,8 @@ end
 -- @return stacks, remaining (seconds; math.huge if permanent), fromPlayer (boolean|nil), duration (number|nil);
 --   or false if known absent; or nil if unknown
 function Adapter.GetAura(unit, auraName, filter)
-    if familySecret("ShouldAurasBeSecret") or not hasFunction(C_UnitAuras, "GetAuraDataBySpellName") then
+    if familySecret("ShouldAurasBeSecret", nil, secretInCombat())
+        or not hasFunction(C_UnitAuras, "GetAuraDataBySpellName") then
         return nil
     end
     local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, unit, auraName, filter)

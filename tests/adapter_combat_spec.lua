@@ -126,6 +126,41 @@ describe("adapter combat accessors", function()
             assert.are.equal(0, calls) -- the pre-check skips the call entirely (D-045)
         end)
 
+        it("without C_Secrets, a nil read in combat is unknown (nil), not absent; out of combat it is absent (D-036)",
+            function()
+                auraData = nil
+                local inCombat = true
+                local Adapter = loadAdapter({
+                    issecretvalue = checker,
+                    C_Secrets = false,
+                    InCombatLockdown = function()
+                        return inCombat
+                    end,
+                    C_UnitAuras = { GetAuraDataBySpellName = function()
+                        return auraData
+                    end },
+                })
+                assert.is_nil(Adapter.GetAura("player", "Battle Shout"))
+                inCombat = false
+                assert.is_false(Adapter.GetAura("player", "Battle Shout"))
+            end)
+
+        it("when ShouldAurasBeSecret errors in combat, the read is unknown", function()
+            auraData = nil
+            local Adapter = loadAdapter({
+                C_Secrets = { ShouldAurasBeSecret = function()
+                    error("boom")
+                end },
+                InCombatLockdown = function()
+                    return true
+                end,
+                C_UnitAuras = { GetAuraDataBySpellName = function()
+                    return auraData
+                end },
+            })
+            assert.is_nil(Adapter.GetAura("player", "Battle Shout"))
+        end)
+
         it("returns nil when a field is secret", function()
             auraData.expirationTime = secret()
             assert.is_nil(aurasAdapter(false).GetAura("player", "Battle Shout"))
@@ -182,6 +217,26 @@ describe("adapter combat accessors", function()
             assert.is_nil(cdAdapter().GetSpellCooldownRemaining(100))
             info.isActive = false
             assert.are.equal(0, cdAdapter().GetSpellCooldownRemaining(100))
+        end)
+
+        it("without C_Secrets, skips the times in combat and uses isActive (D-036)", function()
+            local inCombat = true
+            local Adapter = loadAdapter({
+                issecretvalue = checker,
+                C_Secrets = false,
+                InCombatLockdown = function()
+                    return inCombat
+                end,
+                C_Spell = { GetSpellCooldown = function()
+                    return info
+                end },
+            })
+            assert.is_nil(Adapter.GetSpellCooldownRemaining(100))
+            info.isActive = false
+            assert.are.equal(0, Adapter.GetSpellCooldownRemaining(100))
+            inCombat = false
+            info.isActive = true
+            assert.are.equal(10, Adapter.GetSpellCooldownRemaining(100))
         end)
 
         it("skips the times when ShouldCooldownsBeSecret is true", function()
