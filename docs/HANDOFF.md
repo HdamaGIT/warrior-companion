@@ -38,12 +38,11 @@ CI was red between `1218551` and `52ecc92` (three placeholder comment lines over
 Collected into `beta-results/2026-10-10_154007/`. Probe v3 worked: no popup at login, 893 combat samples, no handler or Lua errors. Client is now build 70338 (Interface still 16001).
 - **Headline:** open-world combat activates restriction type 0 ("Combat"). In combat, auras (by name: `nil`; by index: **error**), cooldown times, rage, health and target casting are secret. Usability, range, auto-attack, stance, target level/classification/reaction, threat, own `UNIT_SPELLCAST_*` and `UNIT_COMBAT` stay readable.
 - Results in `docs/PROBE_RESULTS.md` (Run 2 section, V-10..V-33 filled), gate filled. Decisions **D-044** (gate, provisional until the group run), **D-045** (restriction detection via `Enum.AddOnRestrictionType`; `C_Secrets` pre-check before aura reads), **D-046** (secure buttons: one click edge, idempotent swaps).
-- **Spec impact (proposal, not yet applied):** SPEC_V2 §5.5/§7.4 (avoidance on `UNIT_COMBAT`), §7.1 conditions (drop rage/health conditions; Battle Shout from own casts), §7.2/§7.3/§8.1 (R-06, R-11, A-08 No-go; U-01/R-03/A-01/A-04 Degraded). Needs Hugh's agreement before the `docs:` edit.
+- **Spec impact (agreed and applied, SPEC_V2 2.1, commits 669ff9d and 6b2eee5):** SPEC_V2 §5.5/§7.4 (avoidance on `UNIT_COMBAT`), §7.1 conditions (drop rage/health conditions; Battle Shout from own casts), §7.2/§7.3/§8.1 (R-06, R-11, A-08 No-go; U-01/R-03/A-01/A-04 Degraded).
 - Not answered yet: V-31 built-ins (Hugh gave no notes), DODGE/BLOCK/RESIST in `UNIT_COMBAT`, target cast events (no caster fought), Overpower/Execute windows (not known at level 8), all group/instance/encounter items.
 
 ## Open questions for Hugh
-1. Agree the SPEC_V2 revisions that follow from D-044/D-045 (listed under Beta run 2) so the spec can be edited before M5.
-2. V-31 notes on the built-ins (Cooldown Manager, floating combat text, swing timer, loss-of-control).
+1. V-31 notes on the built-ins (Cooldown Manager, floating combat text, swing timer, loss-of-control). Not blocking M5.
 
 ## Notes for M5 (from the simulator session, 9 Oct)
 - Hugh approved a **visual preview** of UI frames, rendered from the simulator into HTML, starting with the first UI milestone (M5 HUD under D-031). Build frames from plain `CreateFrame` + `SetPoint`/`SetSize`/FontStrings/textures, with minimal Blizzard templates; keep HUD layout in data; drive the 0.2s ticker through the Adapter/C_Timer (no `OnUpdate`), so the simulator clock can run it. **Tell Hugh when M5 UI work starts** so the preview can be built alongside.
@@ -56,9 +55,6 @@ Collected into `beta-results/2026-10-10_154007/`. Probe v3 worked: no popup at l
 - `sim-save/` (untracked, from a simulator run outside this session) was left alone.
 
 ## Next step
-1. Hugh agrees the spec revisions; Claude applies them in a `docs:` commit.
-2. **Beta run 3 before 21 Oct** (group, Stage 5 of `docs/BETA_TESTING.md`): party chat, Taunt until a resist, Challenging Shout/Shield Wall, a mob that **casts** (for R-11), dungeon trash and one boss. Ideally on a character that knows Overpower (level 12+).
-3. Then M5, with Hugh's approval.
+**M5 (combat core + must-have alerts + HUD), approved by Hugh on 10 Oct, in a fresh session.** Build to SPEC_V2 2.1 §5, §7.1, §7.2, §7.4, §7.5, §7.7 and §15 with the gate in D-044 (Go: S-04, X-01, R-01; Degraded: U-01 from own casts, R-03 usability only, avoidance detector on `UNIT_COMBAT`; No-go: R-06, R-11; X-06 off the launch target, D-043). Context `restricted` per D-045. Use the run 2 data (`beta-results/2026-10-10_154007/`, git-ignored, local only) for replay fixtures. The simulator session (`warrior-companion-9c`) was told on 10 Oct that M5 UI work is starting and will build the HTML visual preview; coordinate with it before changing `tools/sim/`.
 
-## Suggested next prompt
-> Read CLAUDE.md, docs/HANDOFF.md, docs/DECISIONS.md and docs/PROBE_RESULTS.md. Beta run 3 done: run `python tools/wowdev.py collect` and read the files. Notes: <party chat / taunt resist / boss / Lua errors / V-31>. Update PROBE_RESULTS.md and the gate, record the decisions. Don't start M5 until I approve it.
+The group run (Stage 5 of `docs/BETA_TESTING.md`) is still worth doing before 21 Oct; it mainly affects M7.
