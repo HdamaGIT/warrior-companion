@@ -54,6 +54,15 @@ function Context:Get()
     return Util.DeepCopy(self.state or Context.Compute(self.flags))
 end
 
+--- Returns the current context table itself, without copying (hot paths: no allocation). Callers must not modify it.
+-- @return table { zone, restricted, inCombat, dead, group }
+function Context:Current()
+    if not self.state then
+        self.state = Context.Compute(self.flags)
+    end
+    return self.state
+end
+
 --- Whether combat and announce features must suspend (D-021).
 -- @return boolean
 function Context:IsRestricted()

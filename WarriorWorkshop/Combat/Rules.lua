@@ -58,6 +58,12 @@ local function compileCondition(tuple, def, args, needs)
     elseif AURA_ARGS[name] then
         needs.auras[#needs.auras + 1] = { a1, a2 }
     end
+    -- Aura timers change a condition's answer with no game event; Evaluate reports when (retryIn).
+    if name == "auraExpiringWithin" and type(a3) == "number" then
+        needs.timed[#needs.timed + 1] = { a1, a2, a3 }
+    elseif name == "auraMissing" then
+        needs.timed[#needs.timed + 1] = { a1, a2, 0 }
+    end
     return { fn, a1, a2, a3 }
 end
 
@@ -77,7 +83,7 @@ local function compileRule(def, override, spellIDs)
         return nil, "unknownAbility", tostring(def.ability)
     end
     local args = mergeArgs(def.args, override and override.args)
-    local needs = { spells = {}, auras = {} }
+    local needs = { spells = {}, auras = {}, timed = {} }
     local stateDefs = def.states or { { name = def.severity, when = def.when or {} } }
     local states = {}
     for index, stateDef in ipairs(stateDefs) do
@@ -104,7 +110,7 @@ local function compileRule(def, override, spellIDs)
     local rule = {
         id = def.id, label = def.label, ability = def.ability, spellID = spellIDs[def.ability],
         display = Rules.DISPLAYS[def.display] and def.display or "strip",
-        countdown = def.countdown, contexts = contexts, states = states, args = args,
+        countdown = def.countdown, contexts = contexts, states = states, args = args, timed = needs.timed,
         delay = type(def.delay) == "number" and def.delay or 0,
         throttle = type(def.throttle) == "number" and def.throttle or 0,
         -- runtime
@@ -152,6 +158,52 @@ function Rules.Compile(pack, overrides, spellIDs)
     return compiled
 end
 
+--- Lists every ability name a rule pack refers to (rule abilities and ability arguments of conditions), so they can
+-- be registered with the SpellMap before it resolves. Pure.
+-- @param pack array of rule definitions
+-- @return array of names, in first-seen order
+function Rules.AbilityNames(pack)
+    local names, seen = {}, {}
+    local function add(name)
+        if type(name) == "string" and name ~= "@ability" and not seen[name] then
+            seen[name] = true
+            names[#names + 1] = name
+        end
+    end
+    for _, def in ipairs(pack) do
+        add(def.ability)
+        for _, stateDef in ipairs(def.states or { { when = def.when or {} } }) do
+            for _, tuple in ipairs(stateDef.when or {}) do
+                local name = tuple[1]
+                if SPELL_ARG[name] then
+                    add(tuple[2])
+                elseif AURA_ARGS[name] then
+                    add(tuple[3])
+                end
+            end
+        end
+    end
+    return names
+end
+
+-- Seconds until one of a rule's aura timers crosses its threshold, or nil.
+local function nextTimedChange(rule, snapshot)
+    local soonest
+    local timed = rule.timed
+    for index = 1, #timed do
+        local item = timed[index]
+        local byUnit = snapshot.auras and snapshot.auras[item[1]]
+        local aura = byUnit and byUnit[item[2]]
+        if aura and aura.state and aura.remaining and aura.remaining ~= math.huge then
+            local wait = aura.remaining - item[3]
+            if wait > 0 and (soonest == nil or wait < soonest) then
+                soonest = wait
+            end
+        end
+    end
+    return soonest
+end
+
 local function wholeSeconds(value)
     if value == nil or value == math.huge then
         return nil
@@ -166,7 +218,8 @@ end
 -- @param now number session time
 -- @param out array refilled with the visible entries in rule order; trailing slots are cleared
 -- @return count (number of entries), changed (boolean: anything visible changed, including a countdown's
---   whole seconds), retryIn (number|nil: seconds until a delayed or throttled change could apply)
+--   whole seconds), retryIn (number|nil: seconds until a delayed or throttled change could apply, or an aura timer
+--   crosses a threshold; the caller re-evaluates then if nothing else does)
 function Rules.Evaluate(compiled, snapshot, context, now, out)
     local count, changed, retryIn = 0, false, nil
     local allowed = context and not context.restricted and not context.dead
@@ -180,6 +233,10 @@ function Rules.Evaluate(compiled, snapshot, context, now, out)
                     candidate = stateIndex
                     break
                 end
+            end
+            local wait = nextTimedChange(rule, snapshot)
+            if wait then
+                retryIn = (retryIn == nil or wait < retryIn) and wait or retryIn
             end
         end
         if candidate ~= rule.candidate then

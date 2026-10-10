@@ -45,3 +45,34 @@ L.DB_REASONS = {
 L.MONEY_GOLD = "%dg"
 L.MONEY_SILVER = "%ds"
 L.MONEY_COPPER = "%dc"
+
+-- Combat companion (M5). Ability names in rules use the game's spellings; labels below are what the HUD shows.
+L.RULE_BATTLE_SHOUT = "Battle Shout"
+L.RULE_EXECUTE = "Execute"
+L.RULE_OVERPOWER = "Overpower"
+L.RULE_AUTO_ATTACK = "Auto-attack off"
+L.RULE_CHARGE = "Charge"
+L.RULE_INTERCEPT = "Intercept"
+L.STATE_DROPPED = "missing"
+L.STATE_EXPIRING = "%ds"
+L.RULE_DISABLED = "Combat rule %s is off: %s %s"
+L.RULE_REASONS = {
+    disabled = "switched off",
+    unknownAbility = "ability not known:",
+    unknownCondition = "unknown condition:",
+}
+
+-- HUD and /ww commands (M5)
+L.HUD_SUSPENDED = "Suspended"
+L.HUD_SUSPENDED_HINT = "Combat alerts are paused here (boss, Mythic+ or PvP restriction)."
+L.HUD_UNLOCKED = "HUD unlocked: drag the frames, then /ww lock."
+L.HUD_LOCKED = "HUD locked."
+L.HUD_ON = "Combat alerts on."
+L.HUD_OFF = "Combat alerts off."
+L.HUD_USAGE = "Usage: /ww hud on|off"
+L.HUD_TEST_ON = "HUD test: showing every display with sample data. /ww test again to stop."
+L.HUD_TEST_OFF = "HUD test stopped."
+L.HUD_IN_COMBAT = "Not in combat: try again when combat ends."
+L.HUD_FRAME_ALERT_STRIP = "Alert strip"
+L.HUD_FRAME_BIG_ALERT = "Big alert"
+L.HUD_FRAME_BADGES = "Badges"

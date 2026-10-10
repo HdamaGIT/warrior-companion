@@ -168,6 +168,20 @@ describe("rules", function()
             assert.are.equal(first, out[1])
         end)
 
+        it("reports when an aura timer will cross a threshold, so the caller can wake up without a game event",
+            function()
+                local compiled = Rules.Compile({ battleShout() }, nil, IDS)
+                local _, _, retryIn = Rules.Evaluate(compiled, snapshotWith(false, { state = true, remaining = 25 }),
+                    OPEN, 0, out)
+                assert.are.equal(15, retryIn) -- 25s left, "expiring" at 10s
+            end)
+
+        it("AbilityNames lists rule abilities and ability arguments once each", function()
+            local names = Rules.AbilityNames({ battleShout(), overpower({ when = { { "inRange", "Charge", "target" },
+                { "spellUsable", "@ability" } } }) })
+            assert.are.same({ "Battle Shout", "Overpower", "Charge" }, names)
+        end)
+
         it("Reset hides everything and says whether anything was visible", function()
             local compiled = Rules.Compile({ overpower() }, nil, IDS)
             Rules.Evaluate(compiled, snapshotWith(true), OPEN, 0, out)

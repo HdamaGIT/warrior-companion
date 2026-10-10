@@ -25,3 +25,5 @@ Combat\AuraTracker.lua
 Combat\Snapshot.lua
 Combat\Rules.lua
 Combat\Avoidance.lua
+Combat\RulePacks\WarriorDefault.lua
+Combat\Companion.lua
