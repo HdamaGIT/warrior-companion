@@ -486,7 +486,7 @@ One movable window (`/ww`), hidden on entering combat. Tabs in v2: **Alerts** (r
 | A-03 | Challenging Shout / Mocking Blow | own `UNIT_SPELLCAST_SUCCEEDED` (+ miss for Mocking Blow, pairing [VERIFY]) | `Challenging Shout up – %dur s, heal through!` / `Mocking Blow %result on %target` |
 | A-04 | Shield Wall / Last Stand | own `UNIT_SPELLCAST_SUCCEEDED`; follow-up 3s before expiry computed from cast time + known duration | `Shield Wall up (%dur s)` → `Shield Wall ending in 3s` |
 | A-07 | Disarm / Intimidating Shout | own `UNIT_SPELLCAST_SUCCEEDED` (misses via pairing, [VERIFY]) | `Disarmed %target` / `Disarm %result on %target` |
-| A-05 *(should)* | Interrupt | `SPELL_INTERRUPT` by player (depends on beta run 3); miss on Pummel/Shield Bash | `Pummel interrupted %spell` / `Pummel missed` |
+| A-05 *(should)* | Interrupt | own Pummel/Shield Bash `UNIT_SPELLCAST_SUCCEEDED` followed by the target's `UNIT_SPELLCAST_INTERRUPTED` [VERIFY V-17, beta run 3]; miss via `UNIT_COMBAT` on target | `Pummel interrupted %spell` / `Pummel missed` |
 | A-08 *(should)* | Low health call | player health < threshold (default 20%) in a group. **No-go** (health is secret) | `%player at %hp%!` |
 | A-06 *(should)* | Sunder counter | target's Sunder stacks reach max | `%n Sunders up on %target` |
 
