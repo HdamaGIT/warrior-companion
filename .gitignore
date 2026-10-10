@@ -24,3 +24,5 @@ __pycache__/
 
 # Saved files collected from the game client by tools/wowdev.py (contain account and character names)
 beta-results/
+sim-out/
+sim-save/

@@ -21,6 +21,7 @@ return function(world)
         registered = {},
         apiUsed = {},
         stubbed = {},
+        templates = {},
     }
 
     local errorHandler = function(e) return e end
@@ -122,15 +123,21 @@ return function(world)
         end,
     }
 
-    local function newFrame(frameType, name, parent)
+    local function newFrame(frameType, name, parent, template)
         local frame = setmetatable({
             _type = frameType or "Frame",
             _name = name,
             _parent = parent,
+            _template = template,
             _events = {},
             _scripts = {},
             _shown = true,
+            _points = {},
+            _id = #sim.frames + 1,
         }, frameMT)
+        if template then
+            sim.templates[template] = true
+        end
         if name then
             G[name] = frame
         end
@@ -171,7 +178,6 @@ return function(world)
     function frameMethods.GetObjectType(self) return self._type end
     function frameMethods.GetParent(self) return self._parent end
     function frameMethods.IsShown(self) return self._shown end
-    function frameMethods.IsVisible(self) return self._shown end
     function frameMethods.Show(self)
         if not self._shown then
             self._shown = true
@@ -187,13 +193,144 @@ return function(world)
     function frameMethods.SetShown(self, shown)
         if shown then self:Show() else self:Hide() end
     end
-    function frameMethods.CreateFontString(self) return newFrame("FontString", nil, self) end
-    function frameMethods.CreateTexture(self) return newFrame("Texture", nil, self) end
+    function frameMethods.CreateFontString(self, name, _, inherits)
+        -- `inherits` here names a font object (GameFontNormal...), not a frame template.
+        local fontString = newFrame("FontString", name, self)
+        if type(inherits) == "string" then
+            fontString._fontObject = inherits
+        end
+        return fontString
+    end
+    function frameMethods.CreateTexture(self, name, _, inherits)
+        return newFrame("Texture", name, self, inherits)
+    end
 
-    G.CreateFrame = function(frameType, name, parent)
-        return newFrame(frameType, name, parent or G.UIParent)
+    ---------------------------------------------------------------- Layout recording (visual preview)
+    -- Recorded only; tools/sim/preview.py resolves anchors and draws the HTML snapshot.
+    -- SetPoint accepts the client forms: (point), (point, x, y), (point, relativeTo),
+    -- (point, relativeTo, relativePoint), (point, relativeTo, relativePoint, x, y).
+    function frameMethods.SetPoint(self, point, a, b, c, d)
+        local relativeTo, relativePoint, x, y
+        if type(a) == "number" then
+            x, y = a, b
+        else
+            relativeTo, relativePoint = a, b
+            if type(relativePoint) == "number" then
+                relativePoint, x, y = nil, b, c
+            else
+                x, y = c, d
+            end
+        end
+        if type(relativeTo) == "string" then
+            relativeTo = G[relativeTo]
+        end
+        point = point:upper()
+        for i, existing in ipairs(self._points) do
+            if existing.point == point then
+                table.remove(self._points, i)
+                break
+            end
+        end
+        self._points[#self._points + 1] = {
+            point = point,
+            relativeTo = relativeTo or false, -- false means the parent, or the screen when parentless
+            relativePoint = (relativePoint or point):upper(),
+            x = x or 0,
+            y = y or 0,
+        }
+    end
+    function frameMethods.ClearAllPoints(self) self._points = {} end
+    function frameMethods.SetAllPoints(self, relativeTo)
+        self._points = {}
+        frameMethods.SetPoint(self, "TOPLEFT", relativeTo or false, "TOPLEFT", 0, 0)
+        frameMethods.SetPoint(self, "BOTTOMRIGHT", relativeTo or false, "BOTTOMRIGHT", 0, 0)
+    end
+    function frameMethods.GetNumPoints(self) return #self._points end
+    function frameMethods.SetSize(self, w, h) self._width, self._height = w, h end
+    function frameMethods.SetWidth(self, w) self._width = w end
+    function frameMethods.SetHeight(self, h) self._height = h end
+    function frameMethods.GetWidth(self) return self._width or 0 end
+    function frameMethods.GetHeight(self) return self._height or 0 end
+    function frameMethods.GetSize(self) return self._width or 0, self._height or 0 end
+    function frameMethods.SetText(self, text)
+        if text == nil then self._text = nil else self._text = tostring(text) end
+    end
+    function frameMethods.SetFormattedText(self, fmt, ...) self._text = string.format(fmt, ...) end
+    function frameMethods.GetText(self) return self._text end
+    function frameMethods.SetTextColor(self, r, g, b, a) self._textColor = { r, g, b, a or 1 } end
+    function frameMethods.SetJustifyH(self, justify) self._justifyH = justify end
+    function frameMethods.SetFont(self, _, size) self._fontSize = size end
+    function frameMethods.SetFontObject(self, fontObject)
+        if type(fontObject) == "string" then self._fontObject = fontObject end
+    end
+    function frameMethods.SetColorTexture(self, r, g, b, a) self._color = { r, g, b, a or 1 } end
+    function frameMethods.SetVertexColor(self, r, g, b, a) self._vertexColor = { r, g, b, a or 1 } end
+    function frameMethods.SetTexture(self, texture)
+        if type(texture) == "number" or type(texture) == "string" then
+            self._texture = texture
+        end
+    end
+    function frameMethods.SetAtlas(self, atlas) self._texture = atlas end
+    function frameMethods.SetBackdropColor(self, r, g, b, a) self._backdropColor = { r, g, b, a or 1 } end
+    function frameMethods.SetBackdropBorderColor(self, r, g, b, a) self._borderColor = { r, g, b, a or 1 } end
+    function frameMethods.SetAlpha(self, alpha) self._alpha = alpha end
+    function frameMethods.GetAlpha(self) return self._alpha or 1 end
+    function frameMethods.SetFrameStrata(self, strata) self._strata = strata end
+    function frameMethods.GetFrameStrata(self) return self._strata or "MEDIUM" end
+    function frameMethods.SetFrameLevel(self, level) self._level = level end
+    function frameMethods.SetParent(self, parent) self._parent = parent end
+    function frameMethods.SetValue(self, value) self._value = value end
+    function frameMethods.GetValue(self) return self._value end
+    function frameMethods.SetMinMaxValues(self, minValue, maxValue) self._min, self._max = minValue, maxValue end
+    function frameMethods.SetStatusBarColor(self, r, g, b, a) self._barColor = { r, g, b, a or 1 } end
+
+    local function isVisible(frame)
+        while frame do
+            if not frame._shown then
+                return false
+            end
+            frame = frame._parent
+        end
+        return true
+    end
+    function frameMethods.IsVisible(self) return isVisible(self) end
+
+    --- Exports every frame's recorded layout as plain tables for the preview renderer.
+    function sim.dumpFrames()
+        local out = {}
+        for _, f in ipairs(sim.frames) do
+            local points = {}
+            for i, p in ipairs(f._points) do
+                points[i] = {
+                    point = p.point,
+                    relativeTo = p.relativeTo and p.relativeTo._id or nil,
+                    relativePoint = p.relativePoint,
+                    x = p.x,
+                    y = p.y,
+                }
+            end
+            out[#out + 1] = {
+                id = f._id, type = f._type, name = f._name, template = f._template,
+                parent = f._parent and f._parent._id or nil,
+                shown = f._shown, visible = isVisible(f),
+                width = f._width, height = f._height, points = points,
+                text = f._text, textColor = f._textColor, justifyH = f._justifyH,
+                fontSize = f._fontSize, fontObject = f._fontObject,
+                color = f._color, vertexColor = f._vertexColor,
+                texture = f._texture and tostring(f._texture) or nil,
+                backdropColor = f._backdropColor, borderColor = f._borderColor,
+                alpha = f._alpha, strata = f._strata, level = f._level,
+                value = f._value, min = f._min, max = f._max, barColor = f._barColor,
+            }
+        end
+        return out
+    end
+
+    G.CreateFrame = function(frameType, name, parent, template)
+        return newFrame(frameType, name, parent, template)
     end
     G.UIParent = newFrame("Frame", "UIParent")
+    G.UIParent:SetSize(world.screen and world.screen.width or 1920, world.screen and world.screen.height or 1080)
     G.GameTooltip = newFrame("GameTooltip", "GameTooltip", G.UIParent)
 
     --- Delivers a game event to every frame registered for it.

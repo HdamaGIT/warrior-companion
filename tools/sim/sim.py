@@ -12,6 +12,8 @@ Usage:
 
 CMD is a slash command ("/ww version") or a directive:
     !fire EVENT [args]   !advance SECONDS   !combat on|off   !reload   !logout   !lua CODE
+    !snapshot [NAME]     write an HTML picture of the add-on's frames to sim-out/NAME.html
+                         (add --open to open each snapshot in the browser)
 """
 from __future__ import annotations
 
@@ -22,6 +24,7 @@ import re
 import shutil
 import sys
 import tempfile
+import webbrowser
 from pathlib import Path
 
 from lupa import lua51
@@ -29,6 +32,7 @@ from lupa import lua51
 REPO = Path(__file__).resolve().parents[2]
 LUA_DIR = Path(__file__).with_name("lua")
 SCENARIO_DIR = Path(__file__).with_name("scenarios")
+SNAPSHOT_DIR = REPO / "sim-out"
 
 DEFAULT_WORLD = {
     "player": {
@@ -152,6 +156,8 @@ class Client:
     def __init__(self, scenario="fresh", addons=("WarriorWorkshop",), addons_root: Path | None = None,
                  sv_dir: Path | None = None):
         self.world = load_scenario(scenario)
+        self.scenario_name = scenario if isinstance(scenario, str) else "custom"
+        self.open_snapshots = False
         self.addons = list(addons)
         self.addons_root = Path(addons_root) if addons_root else REPO
         self._owns_sv_dir = sv_dir is None
@@ -327,6 +333,33 @@ class Client:
         self._require_running()
         return sorted(self._sim.stubbed.keys())
 
+    def frames(self) -> list[dict]:
+        """Every frame's recorded layout (see sim.dumpFrames in lua/wowenv.lua)."""
+        self._require_running()
+        return to_py(self._sim.dumpFrames()) or []
+
+    def templates_used(self) -> list[str]:
+        """Blizzard templates the add-on asked for; the simulator draws them bare."""
+        self._require_running()
+        return sorted(self._sim.templates.keys())
+
+    def snapshot(self, path: Path | str | None = None, title: str = "Warrior Workshop") -> tuple[Path, list[str]]:
+        """Writes an HTML picture of the current frames. Returns (path, layout warnings)."""
+        from preview import render  # local import keeps the headless path free of it
+
+        path = Path(path) if path else SNAPSHOT_DIR / "snapshot.html"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        screen = self.world.get("screen") or {}
+        subtitle = f"scenario {self.scenario_name} · {'in combat' if self.world.get('inCombat') else 'out of combat'}"
+        page, warnings = render(
+            self.frames(),
+            screen=(screen.get("width", 1920), screen.get("height", 1080)),
+            title=title,
+            subtitle=subtitle,
+        )
+        path.write_text(page, encoding="utf-8")
+        return path, warnings
+
 
 # ---- command line ------------------------------------------------------------------------
 
@@ -368,6 +401,14 @@ def dispatch(client: Client, line: str) -> bool:
         client.logout()
     elif name == "lua":
         print(f"[sim] {client.eval(rest)!r}")
+    elif name == "snapshot":
+        target = SNAPSHOT_DIR / f"{rest.strip() or 'snapshot'}.html"
+        path, warnings = client.snapshot(target)
+        print(f"[sim] snapshot written: {path}")
+        for warning in warnings:
+            print(f"[sim]   layout: {warning}")
+        if client.open_snapshots:
+            webbrowser.open(path.resolve().as_uri())
     elif name in ("quit", "exit"):
         return False
     else:
@@ -402,6 +443,8 @@ def main(argv=None) -> int:
     parser.add_argument("--scenario", default="fresh")
     parser.add_argument("--addon", action="append", help="add-on folder to load (default WarriorWorkshop)")
     parser.add_argument("--sv-dir", help="keep SavedVariables here between runs (default: temporary)")
+    parser.add_argument("--open", action="store_true", help="open each !snapshot in the browser")
+    parser.add_argument("--addons-root", help="folder holding the add-on folders (default: the repo root)")
     args = parser.parse_args(argv)
 
     if args.mode == "scenarios":
@@ -413,7 +456,9 @@ def main(argv=None) -> int:
         scenario=args.scenario,
         addons=args.addon or ["WarriorWorkshop"],
         sv_dir=Path(args.sv_dir) if args.sv_dir else None,
+        addons_root=Path(args.addons_root) if args.addons_root else None,
     )
+    client.open_snapshots = args.open
     try:
         client.login()
         seen = _flush_chat(client, 0)
