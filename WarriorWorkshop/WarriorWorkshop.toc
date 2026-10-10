@@ -27,3 +27,7 @@ Combat\Rules.lua
 Combat\Avoidance.lua
 Combat\RulePacks\WarriorDefault.lua
 Combat\Companion.lua
+UI\HUD\HUD.lua
+UI\HUD\AlertStrip.lua
+UI\HUD\BigAlert.lua
+UI\HUD\Badges.lua

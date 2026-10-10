@@ -151,6 +151,12 @@ function Companion:SetEnabled(enabled)
     self:Evaluate()
 end
 
+--- Publishes the current alerts again (for a listener that subscribed after the last change, e.g. the HUD).
+-- Side effects: fires WW_ALERTS_UPDATED.
+function Companion:Republish()
+    Events:Fire("WW_ALERTS_UPDATED", self.out, self.lastCount or 0)
+end
+
 -- Event handlers ----------------------------------------------------------------------------------------------
 
 function Companion:OnStateEvent()

@@ -123,14 +123,22 @@ function commands.debug()
     Adapter.Print(Log.ToggleDebug() and L.DEBUG_ON or L.DEBUG_OFF)
 end
 
+--- Registers a `/ww <name>` subcommand (D-048). A later registration of the same name replaces the earlier one.
+-- @param name string lower-case subcommand
+-- @param fn function(rest) called with the trimmed text after the subcommand
+function Core:RegisterCommand(name, fn)
+    commands[string.lower(name)] = fn
+end
+
 --- Dispatches `/ww <command>`; unknown or not-yet-built commands print a notice.
 -- @param msg string text after /ww
 function Core.HandleSlash(msg)
     local input = (msg or ""):match("^%s*(.-)%s*$")
     local command = (input:match("^(%S+)") or ""):lower()
+    local rest = input:match("^%S+%s+(.-)$") or ""
     local handler = commands[command]
     if handler then
-        handler()
+        handler(rest)
     else
         Adapter.Print(string.format(L.NOT_IMPLEMENTED, input))
     end

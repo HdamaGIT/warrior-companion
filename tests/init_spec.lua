@@ -174,6 +174,17 @@ describe("init", function()
             assert.are.equal("Debug logging is off.", mock.printed[2])
         end)
 
+        it("RegisterCommand adds a subcommand that receives the rest of the line (D-048)", function()
+            local received
+            ns.Core:RegisterCommand("Hud", function(rest)
+                received = rest
+            end)
+            env.SlashCmdList.WW("  hud   off  ")
+            assert.are.equal("off", received)
+            env.SlashCmdList.WW("HUD")
+            assert.are.equal("", received)
+        end)
+
         it("other commands say they are not available yet", function()
             mock.frame:Fire("ADDON_LOADED", ADDON)
             env.SlashCmdList.WW("foo")
