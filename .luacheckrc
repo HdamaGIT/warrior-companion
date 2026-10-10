@@ -46,6 +46,10 @@ stds.wow = {
         "GetInventoryItemDurability", "GetItemStats", "GetItemInfo", "IsUsableItem",
         -- Context and SpellMap reads (Adapter only)
         "IsInInstance", "UnitIsDeadOrGhost", "IsEncounterInProgress", "C_ChallengeMode", "C_Spell", "IsPlayerSpell",
+        -- Combat accessors (M5, Adapter only)
+        "issecretvalue", "C_Secrets", "C_RestrictedActions", "C_UnitAuras", "UnitPower", "UnitPowerMax", "UnitHealth",
+        "UnitHealthMax", "UnitExists", "UnitCanAttack", "GetShapeshiftForm", "GetShapeshiftFormInfo", "PlaySound",
+        "SOUNDKIT",
     },
 }
 
@@ -58,6 +62,7 @@ files["WarriorWorkshop/Core/Init.lua"] = {
 }
 
 files["WarriorWorkshop/UI/*.lua"] = { std = "+wow" }
+files["WarriorWorkshop/UI/HUD/*.lua"] = { std = "+wow" }
 
 files["WarriorWorkshopProbe/*.lua"] = {
     std = "+wow",

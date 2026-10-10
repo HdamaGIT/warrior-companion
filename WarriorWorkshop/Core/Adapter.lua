@@ -558,3 +558,355 @@ Adapter.GetEquipmentSets = guarded("GetEquipmentSets", function()
     end
     return sets
 end)
+
+-- Combat accessors (SPEC_V2 §5.4, D-036, D-044, D-045, D-048) ----------------------------------------------------
+-- Every combat value may be secret. Rules, in order:
+--   1. Before a call whose family Forever marks secret, ask C_Secrets.Should*BeSecret and return nil without calling
+--      (aura calls raise an error when secret, D-045).
+--   2. Every call runs in pcall; an error returns nil.
+--   3. Every returned value (and each table field read) is checked with issecretvalue before it is compared, used in
+--      arithmetic or returned. If issecretvalue is missing, values count as readable only outside restricted contexts
+--      (D-036): Context sets that fallback through Adapter.SetSecretFallback.
+-- A secret or unavailable value returns nil; nil means unknown; unknown is hidden (D-020).
+-- Hot-path accessors return multiple values, never new tables (D-036).
+
+-- The one documented hardcoded spell ID (D-048): Auto Attack. Its name does not resolve; beta run 2 confirmed the ID
+-- (V-23).
+local AUTO_ATTACK_SPELL_ID = 6603
+Adapter.AUTO_ATTACK_SPELL_ID = AUTO_ATTACK_SPELL_ID
+
+local assumeSecret = false
+
+--- Sets how values are treated when issecretvalue does not exist (D-036). Called by Context.
+-- @param secret boolean true while a restricted context is active
+function Adapter.SetSecretFallback(secret)
+    assumeSecret = secret and true or false
+end
+
+-- True if value is secret (or must be assumed secret). Never errors.
+local function isSecret(value)
+    if type(issecretvalue) == "function" then
+        local ok, secret = pcall(issecretvalue, value)
+        if not ok then
+            return true
+        end
+        return secret == true
+    end
+    return assumeSecret
+end
+
+--- Whether a value is secret (or must be assumed secret, D-036). Never errors.
+-- @param value any
+-- @return boolean
+Adapter.IsSecret = isSecret
+
+-- Asks C_Secrets.<name>(arg) whether a family is secret right now. A missing function or an error counts as "not
+-- known to be secret"; the per-value checks still apply.
+local function familySecret(name, arg)
+    local fn = type(C_Secrets) == "table" and C_Secrets[name]
+    if type(fn) ~= "function" then
+        return false
+    end
+    local ok, result = pcall(fn, arg)
+    return ok and result == true
+end
+
+-- Reads tbl[key] and returns it only if readable.
+local function field(tbl, key)
+    local value = tbl[key]
+    if isSecret(value) or value == nil then
+        return nil
+    end
+    return value
+end
+
+--- Restriction types that suspend the HUD and announcer (D-045): Encounter, ChallengeMode and PvPMatch Active.
+-- Combat (type 0) is the normal state of every fight and is not reported.
+-- @return encounter, challengeMode, pvpMatch (booleans), or nil if C_RestrictedActions is missing
+function Adapter.GetRestrictionFlags()
+    if not hasFunction(C_RestrictedActions, "GetAddOnRestrictionState") then
+        return nil
+    end
+    local types = Enum and Enum.AddOnRestrictionType or {}
+    local states = Enum and Enum.AddOnRestrictionState or {}
+    local active = states.Active or 2
+    local function isActive(restrictionType)
+        local ok, state = pcall(C_RestrictedActions.GetAddOnRestrictionState, restrictionType)
+        if not ok or isSecret(state) or state == nil then
+            return false
+        end
+        return state == active
+    end
+    return isActive(types.Encounter or 1), isActive(types.ChallengeMode or 2), isActive(types.PvPMatch or 3)
+end
+
+local function readPower()
+    return UnitPower("player"), UnitPowerMax("player")
+end
+
+--- Player rage. Secret in Forever in and out of combat (V-12), so this normally returns nil (D-044).
+-- @return cur, max or nil
+function Adapter.GetRage()
+    if familySecret("ShouldUnitPowerBeSecret", "player") or type(UnitPower) ~= "function"
+        or type(UnitPowerMax) ~= "function" then
+        return nil
+    end
+    local ok, cur, max = pcall(readPower)
+    if not ok or isSecret(cur) or isSecret(max) or cur == nil or max == nil then
+        return nil
+    end
+    return cur, max
+end
+
+local function readHealth(unit)
+    return UnitHealth(unit), UnitHealthMax(unit)
+end
+
+--- Unit health as a fraction. Secret in Forever for the target (V-11), so this normally returns nil (D-044).
+-- @param unit string
+-- @return number 0..1 or nil
+function Adapter.GetHealthPct(unit)
+    if familySecret("ShouldUnitHealthMaxBeSecret", unit) or type(UnitHealth) ~= "function"
+        or type(UnitHealthMax) ~= "function" then
+        return nil
+    end
+    local ok, cur, max = pcall(readHealth, unit)
+    if not ok or isSecret(cur) or isSecret(max) or cur == nil or max == nil or max <= 0 then
+        return nil
+    end
+    return cur / max
+end
+
+--- Whether a spell is usable now (V-14: readable in combat). Usability includes stance and rage.
+-- @param spellID number
+-- @return usable, noPower (booleans) or nil
+function Adapter.IsSpellUsable(spellID)
+    if not hasFunction(C_Spell, "IsSpellUsable") then
+        return nil
+    end
+    local ok, usable, noPower = pcall(C_Spell.IsSpellUsable, spellID)
+    if not ok or isSecret(usable) or isSecret(noPower) or usable == nil then
+        return nil
+    end
+    return usable and true or false, noPower and true or false
+end
+
+--- Seconds until a spell's cooldown ends (0 = ready). In combat the times are secret (V-13); the readable isActive
+-- flag then still says "ready" (0) when false, and the remaining time is unknown (nil) when true.
+-- @param spellID number
+-- @return number or nil
+function Adapter.GetSpellCooldownRemaining(spellID)
+    if not hasFunction(C_Spell, "GetSpellCooldown") then
+        return nil
+    end
+    local ok, info = pcall(C_Spell.GetSpellCooldown, spellID)
+    if not ok or type(info) ~= "table" or isSecret(info) then
+        return nil
+    end
+    if not familySecret("ShouldCooldownsBeSecret") then
+        local start, duration, modRate = field(info, "startTime"), field(info, "duration"), field(info, "modRate")
+        if start ~= nil and duration ~= nil then
+            if start == 0 or duration == 0 then
+                return 0
+            end
+            local rate = (modRate ~= nil and modRate > 0) and modRate or 1
+            local remaining = (start + duration - Adapter.Now()) / rate
+            return remaining > 0 and remaining or 0
+        end
+    end
+    if field(info, "isActive") == false then
+        return 0
+    end
+    return nil
+end
+
+--- Whether a spell is in range of a unit (V-18: readable in combat).
+-- @param spellID number
+-- @param unit string
+-- @return boolean, or nil when unknown (no target, no range, secret)
+function Adapter.IsSpellInRange(spellID, unit)
+    if not hasFunction(C_Spell, "IsSpellInRange") then
+        return nil
+    end
+    local ok, inRange = pcall(C_Spell.IsSpellInRange, spellID, unit)
+    if not ok or isSecret(inRange) or inRange == nil then
+        return nil
+    end
+    return inRange and true or false
+end
+
+--- Whether auto-attack is on, via IsCurrentSpell(6603) (V-23, D-048).
+-- @return boolean or nil
+function Adapter.IsAutoAttacking()
+    if not hasFunction(C_Spell, "IsCurrentSpell") then
+        return nil
+    end
+    local ok, current = pcall(C_Spell.IsCurrentSpell, AUTO_ATTACK_SPELL_ID)
+    if not ok or isSecret(current) or current == nil then
+        return nil
+    end
+    return current and true or false
+end
+
+--- Reads an aura by name (all ranks, D-048). Never scans by index: that raises an error when secret (V-15).
+-- In combat the by-name call returns nil, which looks like "absent"; the ShouldAurasBeSecret pre-check is what keeps
+-- that from reading as false (D-045).
+-- @param unit string
+-- @param auraName string
+-- @param filter string|nil e.g. "HELPFUL"
+-- @return stacks, remaining (seconds; math.huge if permanent), fromPlayer (boolean|nil), duration (number|nil);
+--   or false if known absent; or nil if unknown
+function Adapter.GetAura(unit, auraName, filter)
+    if familySecret("ShouldAurasBeSecret") or not hasFunction(C_UnitAuras, "GetAuraDataBySpellName") then
+        return nil
+    end
+    local ok, aura = pcall(C_UnitAuras.GetAuraDataBySpellName, unit, auraName, filter)
+    if not ok or isSecret(aura) then
+        return nil
+    end
+    if aura == nil then
+        return false
+    end
+    if type(aura) ~= "table" then
+        return nil
+    end
+    local expires = field(aura, "expirationTime")
+    if expires == nil then
+        return nil
+    end
+    local remaining = math.huge
+    if expires > 0 then
+        remaining = expires - Adapter.Now()
+        if remaining <= 0 then
+            return false
+        end
+    end
+    local fromPlayer = field(aura, "isFromPlayerOrPlayerPet")
+    if fromPlayer == nil then
+        local source = field(aura, "sourceUnit")
+        if source ~= nil then
+            fromPlayer = source == "player"
+        end
+    end
+    return field(aura, "applications") or 0, remaining, fromPlayer, field(aura, "duration")
+end
+
+--- Target existence and hostility (V-19: readable in combat). Hostile = attackable and not dead.
+-- @return exists, hostile (booleans), or nil if unknown
+function Adapter.GetTargetState()
+    if type(UnitExists) ~= "function" or type(UnitCanAttack) ~= "function" then
+        return nil
+    end
+    local ok, exists = pcall(UnitExists, "target")
+    if not ok or isSecret(exists) then
+        return nil
+    end
+    if not exists then
+        return false, false
+    end
+    local okAttack, canAttack = pcall(UnitCanAttack, "player", "target")
+    if not okAttack or isSecret(canAttack) or canAttack == nil then
+        return nil
+    end
+    local dead = false
+    if type(UnitIsDeadOrGhost) == "function" then
+        local okDead, value = pcall(UnitIsDeadOrGhost, "target")
+        if not okDead or isSecret(value) then
+            return nil
+        end
+        dead = value and true or false
+    end
+    return true, (canAttack and not dead) and true or false
+end
+
+--- Spell name for an ID (maps own casts to ability names; ranks share a name). [VERIFY: C_Spell.GetSpellName]
+-- @param spellID number
+-- @return string or nil
+function Adapter.GetSpellName(spellID)
+    if type(spellID) ~= "number" then
+        return nil
+    end
+    local ok, name
+    if hasFunction(C_Spell, "GetSpellName") then
+        ok, name = pcall(C_Spell.GetSpellName, spellID)
+    elseif hasFunction(C_Spell, "GetSpellInfo") then
+        local info
+        ok, info = pcall(C_Spell.GetSpellInfo, spellID)
+        name = ok and type(info) == "table" and info.name or nil
+    end
+    if not ok or isSecret(name) or name == nil then
+        return nil
+    end
+    return name
+end
+
+--- Current stance (V-22: GetShapeshiftFormInfo returns icon, active, castable, spellID).
+-- @return index (0 = none), name (string|nil); or nil if unknown
+function Adapter.GetStance()
+    if type(GetShapeshiftForm) ~= "function" then
+        return nil
+    end
+    local ok, index = pcall(GetShapeshiftForm)
+    if not ok or isSecret(index) or index == nil then
+        return nil
+    end
+    if index == 0 or type(GetShapeshiftFormInfo) ~= "function" then
+        return index, nil
+    end
+    local okInfo, _, _, _, spellID = pcall(GetShapeshiftFormInfo, index)
+    if not okInfo or isSecret(spellID) or spellID == nil then
+        return index, nil
+    end
+    return index, Adapter.GetSpellName(spellID)
+end
+
+--- Spell icon for display. [VERIFY: C_Spell.GetSpellTexture]
+-- @param spellID number
+-- @return fileID or nil
+function Adapter.GetSpellIcon(spellID)
+    if type(spellID) ~= "number" or not hasFunction(C_Spell, "GetSpellTexture") then
+        return nil
+    end
+    local ok, icon = pcall(C_Spell.GetSpellTexture, spellID)
+    if not ok or isSecret(icon) or icon == nil then
+        return nil
+    end
+    return icon
+end
+
+--- Plays a sound kit by SOUNDKIT name (alert style sounds). [VERIFY: PlaySound, SOUNDKIT]
+-- @param kitName string e.g. "RAID_WARNING"
+-- @return true if played
+function Adapter.PlaySound(kitName)
+    if type(PlaySound) ~= "function" or type(SOUNDKIT) ~= "table" or SOUNDKIT[kitName] == nil then
+        return false
+    end
+    return (pcall(PlaySound, SOUNDKIT[kitName], "Master"))
+end
+
+-- Normalised combat events (SPEC_V2 §5.5) -------------------------------------------------------------------
+
+--- Normalises UNIT_COMBAT arguments (V-16: unit, action, descriptor, amount, school; readable in combat).
+-- @return unit, action, descriptor, amount; descriptor and amount are nil if secret or the wrong type; returns
+--   nothing if unit or action is unreadable (ignore the event)
+function Adapter.ReadUnitCombat(unit, action, descriptor, amount)
+    if type(unit) ~= "string" or isSecret(unit) or type(action) ~= "string" or isSecret(action) then
+        return nil
+    end
+    if type(descriptor) ~= "string" or isSecret(descriptor) then
+        descriptor = nil
+    end
+    if type(amount) ~= "number" or isSecret(amount) then
+        amount = nil
+    end
+    return unit, action, descriptor, amount
+end
+
+--- Normalises UNIT_SPELLCAST_* arguments (unit, castGUID, spellID; own casts readable in combat, V-07).
+-- @return unit, spellID; nil if either is secret or missing
+function Adapter.ReadSpellcast(unit, _, spellID)
+    if type(unit) ~= "string" or isSecret(unit) or type(spellID) ~= "number" or isSecret(spellID) then
+        return nil
+    end
+    return unit, spellID
+end
