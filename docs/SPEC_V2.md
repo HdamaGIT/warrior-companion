@@ -178,6 +178,8 @@ warrior-workshop/
 │   │   ├── Snapshot.lua          # per-tick read model of combat state
 │   │   ├── Conditions.lua        # pure condition evaluators
 │   │   ├── Rules.lua             # rule engine
+│   │   ├── AuraTracker.lua       # own-cast aura timers when auras are secret (U-01, D-048)
+│   │   ├── Companion.lua         # module wiring: events, 0.2s ticker, suspend (D-048)
 │   │   ├── Avoidance.lua         # shared parry/dodge/block/resist detector (UNIT_COMBAT)
 │   │   └── RulePacks/WarriorDefault.lua
 │   ├── Announce/
@@ -192,6 +194,7 @@ warrior-workshop/
 │   │   └── Readiness.lua
 │   ├── UI/
 │   │   ├── MainFrame.lua  Widgets.lua
+│   │   ├── HUD/HUD.lua  # shared lifecycle, unlock/lock, positions, /ww hud commands (D-048)
 │   │   ├── HUD/AlertStrip.lua  HUD/BigAlert.lua  HUD/CombatText.lua  HUD/Badges.lua
 │   │   ├── Tabs/AlertsTab.lua  Tabs/AnnounceTab.lua  Tabs/SetsTab.lua
 │   │   └── Tabs/PlannerTab.lua  Tabs/UpgradesTab.lua  Tabs/ReadyTab.lua   # Phase E
@@ -240,7 +243,7 @@ Publishes `WW_CONTEXT_CHANGED` with `{ zone = "openWorld"|"instance", restricted
 | Flag | Detection |
 |---|---|
 | `instance` | `IsInInstance()` party/raid |
-| `restricted` | `C_RestrictedActions.GetAddOnRestrictionState` reports Encounter (1), ChallengeMode (2) or PvPMatch (3) Active (`Enum.AddOnRestrictionType`), plus the existing encounter/M+ signals (`ENCOUNTER_START` without `ENCOUNTER_END`, Mythic+ active), **or** any combat accessor returned a secret in the last 2s. Type 0 (Combat) is the normal state of every fight and does not suspend anything (D-045) |
+| `restricted` | `C_RestrictedActions.GetAddOnRestrictionState` reports Encounter (1), ChallengeMode (2) or PvPMatch (3) Active (`Enum.AddOnRestrictionType`), plus the existing encounter/M+ signals (`ENCOUNTER_START` without `ENCOUNTER_END`, Mythic+ active). A secret value never sets `restricted`; it only makes that value unknown (D-033, D-049). Type 0 (Combat) is the normal state of every fight and does not suspend anything (D-045) |
 | `inCombat` | `PLAYER_REGEN_DISABLED` → `PLAYER_REGEN_ENABLED` |
 | `dead` | `PLAYER_DEAD` → `PLAYER_ALIVE`/`PLAYER_UNGHOST` |
 | `group` | `IsInRaid()` / `IsInGroup()` |
@@ -279,10 +282,12 @@ Resolves ability **names** (from rule packs, announce events and macro templates
 | `GetSpellCooldownRemaining(spellID)` | seconds or `nil` |
 | `IsSpellInRange(spellID, unit)` | boolean or `nil` |
 | `IsCurrentSpell(spellID)` | boolean or `nil` |
-| `IsAutoAttacking()` | boolean or `nil` (via `IsCurrentSpell` on Auto Attack, or `PLAYER_ENTER_COMBAT`/`PLAYER_LEAVE_COMBAT` tracking) |
-| `GetAura(unit, spellID, filter)` | `stacks, remaining, sourceIsPlayer` (multiple returns, D-036), `false` (absent) or `nil` (unknown) |
+| `IsAutoAttacking()` | boolean or `nil` via `IsCurrentSpell(6603)`: Auto Attack does not resolve by name, so its ID is the one documented exception to "no hardcoded spell IDs" (V-23, D-048) |
+| `GetAura(unit, auraName, filter)` | by **name**, because ranks have different IDs; `stacks, remaining, sourceIsPlayer, duration` (multiple returns, D-036), `false` (absent) or `nil` (unknown) (D-048) |
 | `GetCasting(unit)` | `spellID, name, interruptible, remaining` (multiple returns, D-036), `false` or `nil` |
-| `GetStance()` | stance index/name or `nil` |
+| `GetStance()` | `index, name` or `nil` |
+| `GetTargetState()` | `exists, hostile` (`UnitCanAttack` and not dead) or `nil` (D-048) |
+| `GetSpellIcon(spellID)` / `PlaySound(kitName)` | icon file ID / plays a sound kit; keeps the UI free of data APIs (D-048) |
 | `GetEquippedWeaponTypes()` | `{ mainHand, offHand, hasShield }` |
 | `GetPartyUnits()` | array of `{ unit, inRange }` or `nil` |
 | `SubscribeUnitCombat(handler)` | registers a `UNIT_COMBAT` handler (player and target) receiving a **normalised** event (`unit, action, amount, ...`); payload is readable in combat; no attacker identity (D-035) |
@@ -396,7 +401,8 @@ Ring buffers (craft log) evict oldest first. Corrupt or future schema versions: 
   when = nil,                          -- simple rules use `when` instead of `states`
   display = "big",                     -- strip | big | badge
   contexts = { "openWorld", "instance" },
-  throttle = 0.1,
+  delay = nil,                         -- seconds the conditions must hold before the rule shows (S-04: 1.5) (D-048)
+  throttle = 0.1,                      -- minimum seconds between visible state changes
 }
 ```
 
