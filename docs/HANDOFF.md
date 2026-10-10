@@ -6,7 +6,7 @@ Build **M5** (SPEC_V2 2.1 §5, §7.1, §7.2, §7.4, §7.5, §7.7, §15) within t
 ## Outcome
 **Built; pending human check.** CI is green. The in-game checklist is `docs/verification/M5.md`. M7 has not been started.
 
-## What was done (commits d4c0960..42f326b on `main`)
+## What was done (commits d4c0960..cd73db0 on `main`)
 - **Test harness:** `tests/helpers/mock_clock.lua`, `tests/helpers/replay.lua`, combat accessors on the mock adapter with secrecy modes (`run2`: what the beta saw; `all`: secret mode). Fixtures in `tests/fixtures/streams/`: four hand-transcribed run 2 fights (relative times, no raw files) plus `assumed_avoidance.lua` (DODGE/BLOCK/RESIST shapes, marked ASSUMED).
 - **Adapter combat accessors** (`Core/Adapter.lua`). Each one checks `C_Secrets.Should*BeSecret` first, then `issecretvalue` on every value and field, inside `pcall`; secret or unavailable returns `nil`. Accessors: `GetRestrictionFlags`, `GetRage`, `GetHealthPct`, `IsSpellUsable`, `GetSpellCooldownRemaining` (falls back to `isActive` when the times are secret), `IsSpellInRange`, `IsAutoAttacking` (6603), `GetAura` (by name; `nil` when `ShouldAurasBeSecret`; never by index), `GetTargetState`, `GetStance`, `GetSpellName`, `GetSpellIcon`, `PlaySound`, `ReadUnitCombat`, `ReadSpellcast`, `SetSecretFallback`.
 - **Context:** `restricted` comes from `C_RestrictedActions`: Encounter, ChallengeMode or PvPMatch Active (D-045). The Combat restriction (type 0) never suspends. Context also sets the Adapter's secret fallback (D-036). New `Context:Current()` gives a read without copying.
@@ -25,6 +25,7 @@ Build **M5** (SPEC_V2 2.1 §5, §7.1, §7.2, §7.4, §7.5, §7.7, §15) within t
   - `scenarios/combat.json`, and 10 `WarriorWorkshopCombatTests`, including a `/ww test` snapshot with zero layout warnings.
   - The sim session added an overlap warning (42f326b). It caught a real 18px badge/strip overlap at the default positions, fixed in d4a0c9a without any saved-data change.
 - **Docs:** `docs/verification/M5.md`; `DEV_SETUP.md` simulator notes.
+- **Review fix (orchestrator, cd73db0):** when `C_Secrets` is missing or errors, auras and cooldown times count as secret in combat, so a nil aura read cannot show a false "dropped" (D-036). CI run 38063793547 green.
 
 ## Verification state (pasted, not recalled)
 ```
