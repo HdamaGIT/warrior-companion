@@ -2,6 +2,8 @@ local addonName, ns = ...
 
 -- Badges (SPEC_V2 §7.5): small text lines for "badge" alerts (auto-attack off, Charge / Intercept in range) and the
 -- "Suspended" badge shown while a restricted context pauses combat alerts (D-021).
+-- The saved position marks the first badge: the container is one row tall and further badges stack downward below
+-- it, away from the alert strip above (the default positions would otherwise overlap the strip's labels).
 local HUD = ns.HUD
 local L = ns.L
 
@@ -26,7 +28,7 @@ local COLOURS = {
 --- Creates the badge column (HUD places it from combat.hud.badges).
 function Badges:Create()
     local frame = CreateFrame("Frame", nil, UIParent)
-    frame:SetSize(WIDTH, ROWS * ROW_HEIGHT)
+    frame:SetSize(WIDTH, ROW_HEIGHT)
     frame:SetFrameStrata("MEDIUM")
     for index = 1, ROWS do
         local row = CreateFrame("Frame", nil, frame)
