@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Document** | `docs/SPEC_V2.md` |
-| **Version** | 2.0.2 (errata D-029; D-036 to D-043, 10 Oct 2026) |
+| **Version** | 2.1 (beta run 2 findings: D-035, D-044–D-046; 10 Oct 2026) |
 | **Date** | 9 October 2026 |
 | **Owner** | Hugh |
 | **Target client** | World of Warcraft: Forever (beta to 21 Oct 2026; launch 4 Nov 2026) |
@@ -107,7 +107,7 @@ This is the single source of truth for the Warrior Workshop add-on. Claude Code 
 | V-13 | Open world: own spell cooldowns readable (`C_Spell.GetSpellCooldown`) | Cooldown tracker, conditions |
 | V-14 | `C_Spell.IsSpellUsable` reflects Overpower/Revenge/Execute windows | Reactive alerts |
 | V-15 | Player and target auras readable via `C_UnitAuras`, with duration/expiry and source | Battle Shout, Sunder, Rend, Hamstring, Thunder Clap |
-| V-16 | Open world: CLEU fires; fields readable; miss types (DODGE, PARRY, BLOCK, RESIST, IMMUNE) present | Avoidance detector, announcer |
+| V-16 | Open world: CLEU unavailable (D-035), UNIT_COMBAT is the source. Originally: CLEU fires; fields readable; miss types (DODGE, PARRY, BLOCK, RESIST, IMMUNE) present | Avoidance detector, announcer |
 | V-17 | Target casting info incl. not-interruptible flag | Interrupt prompt |
 | V-18 | `C_Spell.IsSpellInRange` for Charge/Intercept | Charge range |
 | V-19 | Nameplate units expose level/classification/reaction/threat | Threat lead (backlog) |
@@ -127,13 +127,15 @@ This is the single source of truth for the Warrior Workshop add-on. Claude Code 
 
 (V-20, XP events, is retired with the analytics scope.)
 
+Results: see `docs/PROBE_RESULTS.md` (runs 1–2) and the decision gate (D-044).
+
 ---
 
 ## 3. Roadmap
 
 | Phase | Name | Contents | Status |
 |---|---|---|---|
-| **A** | Foundations | M0 scaffold, M1 probe, M2 core, M3 probe extension, M4 inventory | M0–M3 built; first beta run 9 Oct (see `docs/PROBE_RESULTS.md`); in-game checks in progress |
+| **A** | Foundations | M0 scaffold, M1 probe, M2 core, M3 probe extension, M4 inventory | M0–M3 built; beta runs 1–2 done (9–10 Oct); group run pending |
 | **B** | Combat companion | M5 combat core + must-have alerts; M6 main window, config and should-have alerts | Build next |
 | **C** | Announcer | M7 tank announcer | Build |
 | **D** | Gear control | M8 gear sets, keybinds, swap queue, weapon swap, macro generator | Build |
@@ -176,7 +178,7 @@ warrior-workshop/
 │   │   ├── Snapshot.lua          # per-tick read model of combat state
 │   │   ├── Conditions.lua        # pure condition evaluators
 │   │   ├── Rules.lua             # rule engine
-│   │   ├── Avoidance.lua         # shared parry/dodge/block/resist detector (CLEU)
+│   │   ├── Avoidance.lua         # shared parry/dodge/block/resist detector (UNIT_COMBAT)
 │   │   └── RulePacks/WarriorDefault.lua
 │   ├── Announce/
 │   │   ├── Announcer.lua         # event → message → channel routing
@@ -238,7 +240,7 @@ Publishes `WW_CONTEXT_CHANGED` with `{ zone = "openWorld"|"instance", restricted
 | Flag | Detection |
 |---|---|
 | `instance` | `IsInInstance()` party/raid |
-| `restricted` | encounter active (`ENCOUNTER_START` without `ENCOUNTER_END`), Mythic+ active, a direct API if V-21 finds one, **or** any combat accessor returned a secret in the last 2s |
+| `restricted` | `C_RestrictedActions.GetAddOnRestrictionState` reports Encounter (1), ChallengeMode (2) or PvPMatch (3) Active (`Enum.AddOnRestrictionType`), plus the existing encounter/M+ signals (`ENCOUNTER_START` without `ENCOUNTER_END`, Mythic+ active), **or** any combat accessor returned a secret in the last 2s. Type 0 (Combat) is the normal state of every fight and does not suspend anything (D-045) |
 | `inCombat` | `PLAYER_REGEN_DISABLED` → `PLAYER_REGEN_ENABLED` |
 | `dead` | `PLAYER_DEAD` → `PLAYER_ALIVE`/`PLAYER_UNGHOST` |
 | `group` | `IsInRaid()` / `IsInGroup()` |
@@ -283,9 +285,11 @@ Resolves ability **names** (from rule packs, announce events and macro templates
 | `GetStance()` | stance index/name or `nil` |
 | `GetEquippedWeaponTypes()` | `{ mainHand, offHand, hasShield }` |
 | `GetPartyUnits()` | array of `{ unit, inRange }` or `nil` |
-| `SubscribeCombatLog(handler)` | registers a CLEU handler receiving a **normalised, secret-checked** event; returns `false` if CLEU unavailable |
+| `SubscribeUnitCombat(handler)` | registers a `UNIT_COMBAT` handler (player and target) receiving a **normalised** event (`unit, action, amount, ...`); payload is readable in combat; no attacker identity (D-035) |
 | `SendChat(msg, channel)` | sends to PARTY/RAID/INSTANCE_CHAT/SAY/YELL; returns `true`, or `false, reason` if blocked; never errors |
 | `EquipSet(setID)` | `C_EquipmentSet.UseEquipmentSet`; out of combat only, returns `false, "combat"` otherwise (D-041) |
+
+Before any aura or cooldown read, the Adapter checks the matching `C_Secrets.Should*BeSecret` and returns `nil` without calling; every call stays in `pcall` (D-045). Rage and health accessors exist but return `nil` while secret (D-044).
 
 **Secure (`Core/Secure.lua`, Phase D)** — out of combat only; each call returns `false, "combat"` if attempted in combat:
 
@@ -298,7 +302,7 @@ No `SetBinding*` calls: keys are assigned in Blizzard's Key Bindings UI against 
 
 ### 5.5 Normalised combat events
 
-The Adapter converts CLEU and unit events into `{ t, kind, src, dst, spellID, spellName, missType, amount, ... }` with GUIDs and flags pre-checked. Kinds used in v2: `SWING_MISSED`, `SPELL_MISSED`, `SPELL_CAST_SUCCESS`, `SPELL_AURA_APPLIED`, `SPELL_AURA_REMOVED`, `SPELL_INTERRUPT`, `UNIT_DIED`. Filters: source or destination is the player (or the player's target for interrupts). This enables the **replay harness** (§13).
+The combat log is unavailable (`COMBAT_LOG_EVENT_UNFILTERED` and `CombatLogGetCurrentEventInfo` are absent, D-035). The Adapter converts `UNIT_COMBAT` (player, target) and own `UNIT_SPELLCAST_*` events into `{ t, kind, unit, action, spellID, spellName, amount, ... }` with secrecy pre-checked. Kinds used in v2: `UNIT_COMBAT` (action WOUND, MISS, DODGE, PARRY, BLOCK etc.) and `PLAYER_CAST_SUCCEEDED`. There is no source or destination GUID or name. This enables the **replay harness** (§13).
 
 ### 5.6 Normalised stat keys
 
@@ -416,6 +420,8 @@ Ring buffers (craft log) evict oldest first. Corrupt or future schema versions: 
 | `hasShield` | bool |
 | `partyMissingAura` | ability, minCount |
 
+In combat, `rageAtLeast`, `targetHealthBelow` and `targetCasting` are unavailable (rage, health and target casting are secret: value unknown, so condition unknown, so hidden; D-044). Aura conditions in combat may be satisfied by "tracked own cast" state (see U-01) when the real aura is unreadable.
+
 New conditions require a spec change (guards against a WeakAuras clone).
 
 **Evaluation.** Event-driven on `UNIT_POWER_UPDATE`, `UNIT_AURA` (player, target, party), `SPELL_UPDATE_USABLE`, `SPELL_UPDATE_COOLDOWN`, `UNIT_HEALTH` (target), `PLAYER_TARGET_CHANGED`, `UNIT_SPELLCAST_START/STOP` (target), `PLAYER_ENTER_COMBAT`/`PLAYER_LEAVE_COMBAT`, plus one shared 0.2s ticker for range and aura countdowns. Snapshot tables are reused; no allocation in hot paths.
@@ -424,30 +430,30 @@ New conditions require a spec change (guards against a WeakAuras clone).
 
 | ID | Rule | Logic | Display |
 |---|---|---|---|
-| U-01, U-15 | **Battle Shout** | *Dropped*: in combat or targeting a hostile, player lacks Battle Shout → full-size flashing icon + sound. *Expiring*: ≤ 10s remaining → large icon with countdown. Thresholds configurable | big |
-| R-03 | **Execute** | target hostile + health < 20% + Execute usable | strip, glow |
-| R-01 | **Overpower** | Overpower usable + ready. If not in Battle Stance, show a small stance hint | strip, glow |
-| R-11 | **Interrupt** | target casting + interruptible + Pummel or Shield Bash ready (whichever the current stance/weapon allows). Optional "priority casts" list (heals, fears) shown with stronger glow | strip |
-| S-04 | **Auto-attack not running** | in combat + target hostile + in melee range + not auto-attacking for > 1.5s | badge |
-| X-01 | **Charge range** | out of combat + target hostile + Charge in range + ready (Intercept when in Berserker Stance) | badge |
-| X-06 | **Local combat text** | from `Combat/Avoidance.lua`: show PARRY / DODGE / BLOCK (and optional crit) as large floating text near the character | combatText |
-| R-06 | **Core cooldown tracker** | icons for Mortal Strike / Bloodthirst / Shield Slam / Whirlwind (whichever known) with remaining time. **Gate:** build only if V-31 shows Blizzard's Cooldown Manager cannot cover this adequately; otherwise record a decision and configure the built-in instead | strip (secondary row) |
+| U-01, U-15 | **Battle Shout** | *Dropped*: in combat or targeting a hostile, player lacks Battle Shout → full-size flashing icon + sound. *Expiring*: ≤ 10s remaining → large icon with countdown. Thresholds configurable. **Gate (D-044): Degraded.** Track own Battle Shout casts (`UNIT_SPELLCAST_SUCCEEDED`) with the duration learned from the real aura out of combat; use the real aura whenever it is readable; in combat "dropped" only when the tracked timer runs out (cannot see dispels or other warriors' shouts) | big |
+| R-03 | **Execute** | target hostile + health < 20% + Execute usable. **Gate: Degraded.** Target health is secret; use `IsSpellUsable(Execute)` alone | strip, glow |
+| R-01 | **Overpower** | Overpower usable + ready. If not in Battle Stance, show a small stance hint. **Gate: Go** (usability only; window untested until level 12) | strip, glow |
+| R-11 | **Interrupt** | target casting + interruptible + Pummel or Shield Bash ready (whichever the current stance/weapon allows). Optional "priority casts" list (heals, fears) shown with stronger glow. **Gate: No-go for launch** (target casting is secret); revisit if beta run 3 shows readable target cast events | strip |
+| S-04 | **Auto-attack not running** | in combat + target hostile + in melee range + not auto-attacking for > 1.5s. **Gate: Go** | badge |
+| X-01 | **Charge range** | out of combat + target hostile + Charge in range + ready (Intercept when in Berserker Stance). **Gate: Go** | badge |
+| X-06 | **Local combat text** | from `Combat/Avoidance.lua`: show PARRY / DODGE / BLOCK (and optional crit) as large floating text near the character. **Gate: Degraded** (`UNIT_COMBAT`, no attacker name); off the launch target (D-043) | combatText |
+| R-06 | **Core cooldown tracker** | icons for Mortal Strike / Bloodthirst / Shield Slam / Whirlwind (whichever known) with remaining time. **Gate:** build only if V-31 shows Blizzard's Cooldown Manager cannot cover this adequately; otherwise record a decision and configure the built-in instead. **Gate: No-go** (cooldown times are secret in combat); Blizzard's Cooldown Manager (`C_CooldownViewer`) exists | strip (secondary row) |
 
 ### 7.3 Should-have alerts (M6)
 
 | ID | Rule | Logic |
 |---|---|---|
 | R-02 | Revenge | usable + ready |
-| U-05 | Sunder Armor | stacks below N (default 5, configurable; off when solo by default) or ≤ 5s remaining |
-| U-06 | Rend | in combat + target lacks player's Rend + target health > 30% |
-| U-07 | Hamstring | target hostile + fleeing or PvP-flagged player + Hamstring missing |
-| U-04 | Thunder Clap | in combat + ≥ 2 enemies engaged (or in a group) + target lacks Thunder Clap |
-| U-02 | **Battle Shout party coverage** | in a party + N members in range missing Battle Shout → badge "BS 3/5" |
-| X-02 | Healing potion / healthstone | in combat + health < 35% + potion or healthstone available and off cooldown |
+| U-05 | Sunder Armor | stacks below N (default 5, configurable; off when solo by default) or ≤ 5s remaining. **No-go in combat** (target auras unreadable) unless tracked from own casts; revisit |
+| U-06 | Rend | in combat + target lacks player's Rend + target health > 30%. **No-go in combat** (target auras and health unreadable) unless tracked from own casts; revisit |
+| U-07 | Hamstring | target hostile + fleeing or PvP-flagged player + Hamstring missing. **No-go in combat** (target auras unreadable) unless tracked from own casts; revisit |
+| U-04 | Thunder Clap | in combat + ≥ 2 enemies engaged (or in a group) + target lacks Thunder Clap. **No-go in combat** (target auras unreadable) unless tracked from own casts; revisit |
+| U-02 | **Battle Shout party coverage** | in a party + N members in range missing Battle Shout → badge "BS 3/5". **Out of combat (pre-pull) only, provisional** |
+| X-02 | Healing potion / healthstone | in combat + health < 35% + potion or healthstone available and off cooldown. **No-go** (health is secret) |
 
 ### 7.4 Avoidance detector (`Combat/Avoidance.lua`)
 
-Single CLEU consumer for **player-as-destination** misses (`SWING_MISSED`, `SPELL_MISSED` with `missType` DODGE/PARRY/BLOCK; also partial blocks from `SWING_DAMAGE` blocked amount) and **player-as-source** misses (`SPELL_MISSED` with RESIST/IMMUNE/MISS/DODGE/PARRY for Taunt, Mocking Blow, Disarm, Intimidating Shout, Pummel, Shield Bash). Publishes `WW_AVOIDANCE` and `WW_PLAYER_SPELL_MISSED`. Feeds X-06 (local text) and the announcer. One detector, two consumers.
+Single consumer of `UNIT_COMBAT` (D-035). `player` unit events with action DODGE, PARRY, BLOCK (and MISS) are incoming avoidance; `target` unit events are your attacks avoided. Taunt and ability resists (Taunt, Mocking Blow, Disarm, Intimidating Shout, Pummel, Shield Bash) come from pairing an own `UNIT_SPELLCAST_SUCCEEDED` with a following `UNIT_COMBAT` on the target within a short window **[VERIFY V-16]** (resists not yet observed). No source name is available. Publishes `WW_AVOIDANCE` and `WW_PLAYER_SPELL_MISSED`. Feeds X-06 (local text) and the announcer. One detector, two consumers.
 
 ### 7.5 HUD (`UI/HUD/*`)
 
@@ -475,13 +481,13 @@ One movable window (`/ww`), hidden on entering combat. Tabs in v2: **Alerts** (r
 
 | ID | Event | Trigger | Default text |
 |---|---|---|---|
-| A-01 | Parry / dodge / block | `WW_AVOIDANCE` | `Parried %src's attack!` (per type) |
-| A-02 | **Taunt resisted** | `WW_PLAYER_SPELL_MISSED` for Taunt | `Taunt RESISTED on %target!` |
-| A-03 | Challenging Shout / Mocking Blow | own `SPELL_CAST_SUCCESS` (+ miss for Mocking Blow) | `Challenging Shout up – %dur s, heal through!` / `Mocking Blow %result on %target` |
-| A-04 | Shield Wall / Last Stand | own cast success; follow-up 3s before expiry (from aura) | `Shield Wall up (%dur s)` → `Shield Wall ending in 3s` |
-| A-07 | Disarm / Intimidating Shout | own cast success and misses | `Disarmed %target` / `Disarm %result on %target` |
-| A-05 *(should)* | Interrupt | `SPELL_INTERRUPT` by player; miss on Pummel/Shield Bash | `Pummel interrupted %spell` / `Pummel missed` |
-| A-08 *(should)* | Low health call | player health < threshold (default 20%) in a group | `%player at %hp%!` |
+| A-01 | Parry / dodge / block | `WW_AVOIDANCE` | `Parried!` (per type; no attacker name, D-035) |
+| A-02 | **Taunt resisted** | `WW_PLAYER_SPELL_MISSED` for Taunt (depends on the cast/`UNIT_COMBAT` pairing, **[VERIFY V-16]**) | `Taunt RESISTED on %target!` |
+| A-03 | Challenging Shout / Mocking Blow | own `UNIT_SPELLCAST_SUCCEEDED` (+ miss for Mocking Blow, pairing [VERIFY]) | `Challenging Shout up – %dur s, heal through!` / `Mocking Blow %result on %target` |
+| A-04 | Shield Wall / Last Stand | own `UNIT_SPELLCAST_SUCCEEDED`; follow-up 3s before expiry computed from cast time + known duration | `Shield Wall up (%dur s)` → `Shield Wall ending in 3s` |
+| A-07 | Disarm / Intimidating Shout | own `UNIT_SPELLCAST_SUCCEEDED` (misses via pairing, [VERIFY]) | `Disarmed %target` / `Disarm %result on %target` |
+| A-05 *(should)* | Interrupt | `SPELL_INTERRUPT` by player (depends on beta run 3); miss on Pummel/Shield Bash | `Pummel interrupted %spell` / `Pummel missed` |
+| A-08 *(should)* | Low health call | player health < threshold (default 20%) in a group. **No-go** (health is secret) | `%player at %hp%!` |
 | A-06 *(should)* | Sunder counter | target's Sunder stacks reach max | `%n Sunders up on %target` |
 
 Variables (fixed set): `%player %target %src %spell %dur %hp %n %result`. Text is editable per event; a full template system (A-11) is backlog.
@@ -590,7 +596,8 @@ Out of combat traffic lights: lowest durability (≥ 60% / 30–59% / < 30%), tr
 | `ENCOUNTER_START/END`, `CHALLENGE_MODE_START/COMPLETED` | Context (restricted) |
 | `ZONE_CHANGED_NEW_AREA`, `PLAYER_ENTERING_WORLD`, `GROUP_ROSTER_UPDATE` | Context |
 | `UNIT_POWER_UPDATE`, `UNIT_AURA`, `UNIT_HEALTH`, `SPELL_UPDATE_USABLE`, `SPELL_UPDATE_COOLDOWN`, `PLAYER_TARGET_CHANGED`, `UNIT_SPELLCAST_*` (target), `PLAYER_ENTER_COMBAT/LEAVE_COMBAT`, `UPDATE_SHAPESHIFT_FORM` | Combat snapshot → Rules |
-| `COMBAT_LOG_EVENT_UNFILTERED` | Adapter → Avoidance, Announcer |
+| `UNIT_COMBAT` (player, target) | Adapter → Avoidance, Announcer |
+| `ADDON_RESTRICTION_STATE_CHANGED` | Context |
 | `PLAYER_EQUIPMENT_CHANGED`, `EQUIPMENT_SETS_CHANGED` | Gear sets, Advisor, conditions (`hasShield`) |
 | `BAG_UPDATE_DELAYED`, `BANKFRAME_OPENED`, `PLAYERBANKSLOTS_CHANGED` | Inventory |
 | `TRADE_SKILL_SHOW/LIST_UPDATE`, craft events, `SKILL_LINES_CHANGED` | Professions |
@@ -613,7 +620,7 @@ Added to `WarriorWorkshopProbe` as a separate change; may be built in parallel w
 | Command | Purpose | Answers |
 |---|---|---|
 | `/wwprobe combat` | Toggle a 0.25s combat sampler recording **type and secret status only** of target health, rage, cooldowns, usability, auras (player, target, party1–4), casting info, range, `IsCurrentSpell`, stance; plus encounter state | V-11–V-15, V-17, V-18, V-23, V-32 |
-| (recorder) | Adds CLEU (first 300 events/session, field types, secret flags, miss types), `PLAYER_DEAD`, `UNIT_THREAT_LIST_UPDATE`, `NAME_PLATE_UNIT_ADDED`, `TRAINER_SHOW`, `UPDATE_SHAPESHIFT_FORM`, `EQUIPMENT_SETS_CHANGED` | V-16, V-19, V-24 |
+| (recorder) | Adds CLEU, found unavailable (D-035) (first 300 events/session, field types, secret flags, miss types), `PLAYER_DEAD`, `UNIT_THREAT_LIST_UPDATE`, `NAME_PLATE_UNIT_ADDED`, `TRAINER_SHOW`, `UPDATE_SHAPESHIFT_FORM`, `EQUIPMENT_SETS_CHANGED` | V-16, V-19, V-24 |
 | `/wwprobe spells` | Dump spellbook names and IDs | V-22 |
 | `/wwprobe trainer` | Dump trainer services (window open) | V-24 |
 | `/wwprobe chat` | From an event handler (via a 1s timer, not a key press), attempt PARTY, RAID, INSTANCE_CHAT, SAY, YELL with `[WWPROBE]`; record success/error per channel and context. Also bind `/wwprobe chatkey` to a key and repeat SAY from a key press | V-25, V-26 |
