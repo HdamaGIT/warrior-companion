@@ -12,6 +12,7 @@ local addonName, ns = ...
 -- Suspends while restricted (D-021).
 local Adapter = ns.Adapter
 local Events = ns.Events
+local Log = ns.Log
 
 local Avoidance = ns:NewModule("Avoidance")
 ns.Avoidance = Avoidance
@@ -121,9 +122,15 @@ function Avoidance:OnUnitCombat(...)
     end
     local direction, kind, partial, missed = self.detector:OnUnitCombat(Adapter.Now(), unit, action, descriptor)
     if direction then
+        if Log.IsDebug() then -- the in-game check reads these (no combat text in M5, D-043)
+            Log.Debug(string.format("avoidance: %s %s%s", direction, kind, partial and " (partial)" or ""))
+        end
         Events:Fire("WW_AVOIDANCE", direction, kind, partial, amount)
     end
     if missed then
+        if Log.IsDebug() then
+            Log.Debug(string.format("avoidance: %s %s", tostring(missed), kind))
+        end
         Events:Fire("WW_PLAYER_SPELL_MISSED", missed, kind)
     end
 end
