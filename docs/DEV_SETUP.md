@@ -109,4 +109,19 @@ In Git Bash, set `MSYS_NO_PATHCONV=1` first, otherwise `"/ww"` is rewritten into
 
 **Extending it:** add a data API with `def("C_Foo.Bar", "ASSUMED", fn)` in `api.lua` when the Adapter starts using it, add world data to a scenario in `tools/sim/scenarios/`, and add an end-to-end test to `WarriorWorkshopTests` in `tools/sim/tests/test_sim.py`. Unknown PascalCase frame methods are silent no-ops (listed by `Client.stubbed_methods()`); unknown lowercase fields are `nil`, as on real frames.
 
-Not simulated: combat secret values, taint, protected-function rules, real skill-up randomness, the auction house, pixel layout.
+### Visual preview (snapshots)
+
+`!snapshot NAME` writes `sim-out/NAME.html` (git-ignored): a close-up of the add-on's visible frames, the full 1920×1080 screen, a list of layout warnings and a list of every frame. Add `--open` to open each snapshot in your browser as it is written.
+
+```powershell
+# the demo HUD fixture, out of combat and in combat
+python tools/sim/sim.py run --open --addons-root tools/sim/tests/fixtures --addon UiAddon "!snapshot hud-idle" "!combat on" "!snapshot hud-combat"
+# the real add-on, once it has UI (M5 onwards)
+python tools/sim/sim.py run --open "/ww hud" "!snapshot hud"
+```
+
+The preview resolves `SetPoint`/`SetAllPoints` anchors and sizes the way the client does, and draws colour textures, status bars, backdrop colours, text (including `|cff…|r` colour codes) and shown or hidden state. Tick **show hidden frames** to see frames that exist but are hidden.
+
+Layout warnings flag frames that are visible but have no anchor (the client would not draw them), frames entirely off-screen, zero-size frames, anchor loops, and frames built from a Blizzard template. Templates, art (`SetTexture` file paths, drawn hatched), fonts and scaling are **not** reproduced, so the preview checks placement and behaviour, not the final look. Sign-off is still the in-game checklist.
+
+Not simulated: combat secret values, taint, protected-function rules, real skill-up randomness, the auction house, Blizzard art, fonts and templates.
