@@ -62,9 +62,21 @@ function H.pureFiles()
     return files
 end
 
+-- The Combat files in .toc order (M5). Pure modules: no WoW globals, so they load in busted as they are.
+H.COMBAT_FILES = {
+    "Combat/Conditions.lua",
+    "Combat/AuraTracker.lua",
+    "Combat/Snapshot.lua",
+    "Combat/Rules.lua",
+    "Combat/Avoidance.lua",
+    "Combat/RulePacks/WarriorDefault.lua",
+    "Combat/Companion.lua",
+}
+
 --- Loads all Core files, including Init.lua, into a sandbox environment.
 -- The sandbox reads through to _G; writes land in env, so tests can see which globals the files create.
--- @param opts table|nil { adapter = mock, stubs = table of extra environment fields }
+-- @param opts table|nil { adapter = mock, stubs = table of extra environment fields, extraFiles = array of paths
+--   loaded after the Core files (e.g. H.COMBAT_FILES or a prefix of it) }
 -- @return ns, env
 function H.bootSandbox(opts)
     opts = opts or {}
@@ -72,7 +84,25 @@ function H.bootSandbox(opts)
     for key, value in pairs(opts.stubs or {}) do
         env[key] = value
     end
-    local ns = H.newNs(H.CORE_FILES, { adapter = opts.adapter, env = env })
+    local files = {}
+    for _, relPath in ipairs(H.CORE_FILES) do
+        files[#files + 1] = relPath
+    end
+    for _, relPath in ipairs(opts.extraFiles or {}) do
+        files[#files + 1] = relPath
+    end
+    local ns = H.newNs(files, { adapter = opts.adapter, env = env })
+    return ns, env
+end
+
+--- Boots the add-on (Core plus extraFiles) against a mock adapter and runs ADDON_LOADED and PLAYER_LOGIN.
+-- @param mock table mock adapter
+-- @param extraFiles array|nil paths after the Core files (default H.COMBAT_FILES)
+-- @return ns, env
+function H.boot(mock, extraFiles)
+    local ns, env = H.bootSandbox({ adapter = mock, extraFiles = extraFiles or H.COMBAT_FILES })
+    mock.frame:Fire("ADDON_LOADED", "WarriorWorkshop")
+    mock.frame:Fire("PLAYER_LOGIN")
     return ns, env
 end
 

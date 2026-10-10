@@ -20,3 +20,8 @@ Core\DB.lua
 Core\Init.lua
 Core\Context.lua
 Core\SpellMap.lua
+Combat\Conditions.lua
+Combat\AuraTracker.lua
+Combat\Snapshot.lua
+Combat\Rules.lua
+Combat\Avoidance.lua
