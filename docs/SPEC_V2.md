@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Document** | `docs/SPEC_V2.md` |
-| **Version** | 2.0.1 (errata D-029, 9 Oct 2026) |
+| **Version** | 2.0.2 (errata D-029; D-036 to D-043, 10 Oct 2026) |
 | **Date** | 9 October 2026 |
 | **Owner** | Hugh |
 | **Target client** | World of Warcraft: Forever (beta to 21 Oct 2026; launch 4 Nov 2026) |
@@ -141,7 +141,7 @@ This is the single source of truth for the Warrior Workshop add-on. Claude Code 
 | **E** | Workshop | M10 professions, M11 prices and planner, M12 planner tab, M13 gear advisor + tank stat sheet, M14 readiness, M15 `v1.0.0` | Build after D |
 | **F** | Later | Backlog items rated 3; raid coordination (cooldown plans, assignments, Python analysis loop) | Outline only (§17) |
 
-**Launch target (4 November 2026):** M5 complete, M7 core (A-01 to A-04, A-07) complete. M6 and M8 within the first week or two after launch. Workshop in the weeks after.
+**Launch target (4 November 2026):** M5 complete (without X-06 combat text and R-06 unless V-31 shows the built-ins cannot cover them, D-043), M7 core (A-01 to A-04, A-07) complete. M6 and M8 within the first week or two after launch. Workshop in the weeks after.
 
 ---
 
@@ -278,22 +278,23 @@ Resolves ability **names** (from rule packs, announce events and macro templates
 | `IsSpellInRange(spellID, unit)` | boolean or `nil` |
 | `IsCurrentSpell(spellID)` | boolean or `nil` |
 | `IsAutoAttacking()` | boolean or `nil` (via `IsCurrentSpell` on Auto Attack, or `PLAYER_ENTER_COMBAT`/`PLAYER_LEAVE_COMBAT` tracking) |
-| `GetAura(unit, spellID, filter)` | `{ stacks, remaining, sourceIsPlayer }`, `false` (absent) or `nil` (unknown) |
-| `GetCasting(unit)` | `{ spellID, name, interruptible, remaining }`, `false` or `nil` |
+| `GetAura(unit, spellID, filter)` | `stacks, remaining, sourceIsPlayer` (multiple returns, D-036), `false` (absent) or `nil` (unknown) |
+| `GetCasting(unit)` | `spellID, name, interruptible, remaining` (multiple returns, D-036), `false` or `nil` |
 | `GetStance()` | stance index/name or `nil` |
 | `GetEquippedWeaponTypes()` | `{ mainHand, offHand, hasShield }` |
 | `GetPartyUnits()` | array of `{ unit, inRange }` or `nil` |
 | `SubscribeCombatLog(handler)` | registers a CLEU handler receiving a **normalised, secret-checked** event; returns `false` if CLEU unavailable |
 | `SendChat(msg, channel)` | sends to PARTY/RAID/INSTANCE_CHAT/SAY/YELL; returns `true`, or `false, reason` if blocked; never errors |
+| `EquipSet(setID)` | `C_EquipmentSet.UseEquipmentSet`; out of combat only, returns `false, "combat"` otherwise (D-041) |
 
 **Secure (`Core/Secure.lua`, Phase D)** — out of combat only; each call returns `false, "combat"` if attempted in combat:
 
 | Function | Purpose |
 |---|---|
-| `EquipSet(setID)` | `C_EquipmentSet.UseEquipmentSet` |
 | `CreateWeaponSwapButton(name, macrotext)` | secure action button for in-combat weapon swaps |
-| `BindClick(key, buttonName)` / `BindCommand(key, command)` | set bindings (persisted per character) |
 | `WriteMacro(name, icon, body, perCharacter)` | create or update a macro; returns slot or `false, reason` |
+
+No `SetBinding*` calls: keys are assigned in Blizzard's Key Bindings UI against bindings declared in `Bindings.xml` (D-040).
 
 ### 5.5 Normalised combat events
 
@@ -353,9 +354,9 @@ WarriorWorkshopCharDB = {
   },
 
   gear = {
-    sets = { [slot 1..8] = { setID = n, name = "Tank", key = "CTRL-2" } },
-    queued = nil,                     -- setID awaiting combat end
-    weaponSwaps = { [slot 1..4] = { name = "2H", macrotext = "/equipslot 16 ...", key = "ALT-1" } },
+    sets = { [slot 1..8] = { setID = n, name = "Tank" } },   -- keys live in Key Bindings (D-040)
+    queued = nil,                     -- setID awaiting combat end; cleared at login (D-041)
+    weaponSwaps = { [slot 1..4] = { name = "2H", macrotext = "/equipslot 16 ..." } },
     macros = { [templateID] = { enabled = bool, name, perCharacter = true } },
   },
 
@@ -489,7 +490,9 @@ Variables (fixed set): `%player %target %src %spell %dur %hp %n %result`. Text i
 
 - Each event has a channel per group context: **solo**, **party**, **raid**, **instance**. Options: `off`, `self` (prefixed local print + big combat text), `PARTY`, `RAID`, `INSTANCE_CHAT`, `SAY`, `YELL`.
 - **SAY/YELL** outside instances require a key press; announcements are triggered by combat events, not key presses, so outdoors they **fall back to `self`** and the UI explains why. Inside instances SAY/YELL are allowed (outside restricted contexts) [VERIFY V-25].
-- Defaults: solo `self`; party `PARTY`; raid `RAID` for A-02/A-03/A-04, `off` for A-01; instance `INSTANCE_CHAT`.
+- Defaults: solo `self`; party `PARTY` (A-01 `self`, D-037); raid `RAID` for A-02/A-03/A-04, `off` for A-01; instance `INSTANCE_CHAT` (A-01 `self`).
+- **instance** means "in an instance-category (LFG) group", not "zone is an instance"; a hand-made party inside a dungeon uses the **party** channel (D-038).
+- Saved data holds sparse overrides only; defaults live in `Announce/Events.lua` and `RulePacks/` (D-039).
 - **Throttle**: per-event minimum interval (default 2s; parry/dodge/block 5s) and a global cap of 1 message per second. Never send identical text twice within 3s.
 - **Restricted context**: suspend chat sends [VERIFY V-26]; optionally queue a short summary after `ENCOUNTER_END` (backlog).
 - Chat failures return `false, reason` from the Adapter and are logged once; they never error.
@@ -512,17 +515,17 @@ Variables (fixed set): `%player %target %src %spell %dur %hp %n %result`. Text i
 
 ### 9.2 Combat swap queue (G-02)
 
-- If a set is requested in combat, store it in `gear.queued`, show a "⇄ Tank queued" badge, and apply on `PLAYER_REGEN_ENABLED`. A new request replaces the queued one; `/ww set cancel` clears it.
+- If a set is requested in combat, store it in `gear.queued`, show a "⇄ Tank queued" badge, and apply on `PLAYER_REGEN_ENABLED`. A new request replaces the queued one; `/ww set cancel` clears it. The queue is cleared at login, not re-applied (D-041).
 
 ### 9.3 In-combat weapon swap (G-03)
 
-- Up to 4 secure weapon-swap buttons, each with macrotext built from the chosen items (`/equipslot 16 <item>` / `/equipslot 17 <item>` / `/equip <2H>`), created out of combat by `Core/Secure.lua` and bound with `SetBindingClick`.
-- Editing a swap or its key is out of combat only; the Sets tab disables controls in combat.
+- Up to 4 secure weapon-swap buttons, each with macrotext built from the chosen items (`/equipslot 16 <item>` / `/equipslot 17 <item>` / `/equip <2H>`), created out of combat by `Core/Secure.lua`; their bindings are declared in `Bindings.xml` as `CLICK <button>:LeftButton` and keys are set in Key Bindings (D-040).
+- Editing a swap is out of combat only; the Sets tab disables controls in combat.
 - [VERIFY V-28]: if secure weapon swaps don't work in Forever, fall back to the macro generator producing equivalent macros for the action bar.
 
 ### 9.4 Macro generator (X-07)
 
-Generates or updates character macros out of combat from templates, using resolved spell names (SpellMap) and the user's weapon-swap items:
+Generates or updates character macros out of combat from templates, using resolved spell names (SpellMap) and the user's weapon-swap items: Stance templates are gated on SpellMap like rules: a template whose stances are unknown is disabled (D-042).
 
 | Template | Body (illustrative; finalised against V-22) |
 |---|---|

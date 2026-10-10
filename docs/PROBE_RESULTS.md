@@ -199,7 +199,7 @@ V-20 (XP events) is retired with the analytics scope (D-022).
 ### V-30 Bindings declared in `Bindings.xml` appear in Key Bindings and persist
 - **Result:**
 - **Evidence:** Hugh: the binding is listed under AddOns → Warrior Workshop Probe. `bindings.checks[*]` (one per login and per `/wwprobe chatkey`) still shows the key after a relog; `bindings.pressed`.
-- **Used by:** G-01 keybinds (P-5)
+- **Used by:** G-01 keybinds (D-040)
 - **Decision:**
 
 ### V-31 Built-ins: Cooldown Manager, swing timer, floating combat text, loss-of-control
