@@ -25,7 +25,7 @@ local COLOURS = {
 
 --- Creates the badge column (HUD places it from combat.hud.badges).
 function Badges:Create()
-    local frame = CreateFrame("Frame", "WarriorWorkshopBadges", UIParent)
+    local frame = CreateFrame("Frame", nil, UIParent)
     frame:SetSize(WIDTH, ROWS * ROW_HEIGHT)
     frame:SetFrameStrata("MEDIUM")
     for index = 1, ROWS do

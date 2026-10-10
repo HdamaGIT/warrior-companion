@@ -20,7 +20,7 @@ local TEST_ALERTS = {
 function AlertStrip:Create(settings, style)
     local size = (style.reactive and style.reactive.size) or 48
     self.maxIcons = settings.maxIcons or 6
-    local frame = CreateFrame("Frame", "WarriorWorkshopAlertStrip", UIParent)
+    local frame = CreateFrame("Frame", nil, UIParent)
     frame:SetSize(self.maxIcons * (size + GAP) - GAP, size + 16)
     frame:SetFrameStrata("MEDIUM")
     for index = 1, self.maxIcons do

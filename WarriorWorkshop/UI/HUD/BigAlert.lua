@@ -22,7 +22,7 @@ function BigAlert:Create(_, style)
             largest = entry.size
         end
     end
-    local frame = CreateFrame("Frame", "WarriorWorkshopBigAlert", UIParent)
+    local frame = CreateFrame("Frame", nil, UIParent)
     frame:SetSize(largest, largest + 24)
     frame:SetFrameStrata("HIGH")
     local widget = HUD.CreateIcon(frame, largest)
