@@ -261,8 +261,18 @@ class Client:
         self._sim.advance(seconds)
 
     def set_combat(self, in_combat: bool) -> None:
+        """Enters or leaves combat in the order beta run 2 recorded: restriction type 0 (Combat) becomes Active
+        before either event fires; PLAYER_REGEN_DISABLED then ADDON_RESTRICTION_STATE_CHANGED(0, 1) on entry,
+        ADDON_RESTRICTION_STATE_CHANGED(0, 0) then PLAYER_REGEN_ENABLED on exit. PLAYER_ENTER_COMBAT (auto-attack)
+        is separate: fire it yourself."""
         self.set("inCombat", in_combat)
-        self.fire("PLAYER_REGEN_DISABLED" if in_combat else "PLAYER_REGEN_ENABLED")
+        self.set("restrictions.0", 2 if in_combat else 0)
+        if in_combat:
+            self.fire("PLAYER_REGEN_DISABLED")
+            self.fire("ADDON_RESTRICTION_STATE_CHANGED", 0, 1)
+        else:
+            self.fire("ADDON_RESTRICTION_STATE_CHANGED", 0, 0)
+            self.fire("PLAYER_REGEN_ENABLED")
 
     def set(self, path: str, value) -> None:
         """Changes the fake world, e.g. set("money", 5000) or set("bags.0.slots", 20)."""

@@ -68,6 +68,9 @@ return function(sim)
         return kind ~= "none", kind
     end)
     def("UnitIsDeadOrGhost", "KNOWN", function(unit)
+        if unit == "target" then
+            return world.target ~= nil and world.target.dead == true
+        end
         return unit == "player" and world.dead == true
     end)
 
@@ -126,4 +129,230 @@ return function(sim)
             item.itemType or "", item.subType or "", item.stack or 1, item.equipLoc or "", item.icon or 0,
             item.sellPrice or 0
     end)
+
+    ---------------------------------------------------------------- Restrictions and secret values (M5)
+    -- What beta run 2 (10 Oct 2026, open world, solo) recorded; see docs/PROBE_RESULTS.md "Run 2":
+    --   * Restriction type 0 (Combat) is Active (state 2) for the whole of every fight. The event
+    --     ADDON_RESTRICTION_STATE_CHANGED fired with (0, 1) right after PLAYER_REGEN_DISABLED and (0, 0) right before
+    --     PLAYER_REGEN_ENABLED, at the same GetTime; no (0, 2) event and no 1 -> 2 transition was seen. Reading the
+    --     second argument as an active flag (not the state enum) is ASSUMED. Client.set_combat fires that order.
+    --   * While type 0 is active: aura reads are secret (by name: nil; by index: an error), cooldown startTime /
+    --     duration / modRate are secret (isActive, isEnabled readable). Rage and health were secret even out of combat.
+    --   * Usability, range, IsCurrentSpell, stance, target reaction/attackable and event payloads stay readable.
+    -- world.secretsOff = true turns every secret off (for testing the readable path).
+    --
+    -- Secret values are userdata proxies, ported from tests/helpers/probe_client.lua. They raise on indexing,
+    -- arithmetic, concatenation, ordering (<, <=), length, call and tostring, like real secrets. Lua 5.1 cannot catch
+    -- three misuses, so the simulator does NOT detect them:
+    --   * secret == x against a non-secret is silently false (__eq only runs when both sides are userdata);
+    --   * t[secret] = x and t[secret] reads are not intercepted;
+    --   * `if secret then` is always true (truthiness cannot be intercepted).
+    local function secretError()
+        error("attempt to use a secret value", 2)
+    end
+    local secretPrototype = newproxy(true)
+    do
+        local meta = getmetatable(secretPrototype)
+        for _, event in ipairs({ "__index", "__newindex", "__add", "__sub", "__mul", "__div", "__mod", "__pow",
+            "__unm", "__concat", "__len", "__lt", "__le", "__call", "__tostring" }) do
+            meta[event] = secretError
+        end
+    end
+    local secretSet = setmetatable({}, { __mode = "k" })
+    local function secret()
+        local value = newproxy(secretPrototype)
+        secretSet[value] = true
+        return value
+    end
+    sim.secret = secret
+
+    local function restrictionState(restrictionType)
+        local states = world.restrictions
+        return states and states[restrictionType] or 0
+    end
+    local function combatSecrets()
+        return world.secretsOff ~= true and restrictionState(0) == 2
+    end
+    local function alwaysSecret()
+        return world.secretsOff ~= true
+    end
+    local function maybeSecret(isSecret, value)
+        if isSecret and value ~= nil then
+            return secret()
+        end
+        return value
+    end
+
+    def("issecretvalue", "KNOWN", function(value)
+        return type(value) == "userdata" and secretSet[value] == true
+    end)
+
+    G.Enum = G.Enum or {}
+    -- KNOWN (run 2 static dump).
+    G.Enum.AddOnRestrictionType = { Combat = 0, Encounter = 1, ChallengeMode = 2, PvPMatch = 3, Map = 4, Chat = 5 }
+    G.Enum.AddOnRestrictionState = { Inactive = 0, Activating = 1, Active = 2 }
+
+    def("C_RestrictedActions.GetAddOnRestrictionState", "KNOWN", function(restrictionType)
+        return restrictionState(restrictionType)
+    end)
+    def("C_RestrictedActions.IsAddOnRestrictionActive", "KNOWN", function(restrictionType)
+        return restrictionState(restrictionType) == 2
+    end)
+
+    def("C_Secrets.ShouldAurasBeSecret", "KNOWN", function() return combatSecrets() end)
+    def("C_Secrets.ShouldCooldownsBeSecret", "KNOWN", function() return combatSecrets() end)
+    def("C_Secrets.ShouldUnitPowerBeSecret", "KNOWN", function() return alwaysSecret() end)
+    def("C_Secrets.ShouldUnitHealthMaxBeSecret", "KNOWN", function() return alwaysSecret() end)
+
+    ---------------------------------------------------------------- Combat state (M5)
+    -- World shape (spell names as in world.spells; IDs in scenarios are fake 9xxxxx):
+    --   target = { exists, hostile, dead }, autoAttack = bool, stance = { index, spellID },
+    --   spellState = { [name] = { usable, noPower, inRange, cdStart, cdDuration } },
+    --   auras = { player = { [name] = { duration, expirationTime, applications, sourceUnit } } },
+    --   power = { rage, rageMax }, targetHealth = { cur, max }
+    local function spellName(spellID)
+        for name, id in pairs(world.spells or {}) do
+            if id == spellID then
+                return name
+            end
+        end
+        return nil
+    end
+    local function spellState(spell)
+        local name = type(spell) == "number" and spellName(spell) or spell
+        return name and world.spellState and world.spellState[name] or nil
+    end
+    local function target()
+        local t = world.target
+        if t and t.exists then
+            return t
+        end
+        return nil
+    end
+
+    def("UnitExists", "KNOWN", function(unit)
+        if unit == "player" then
+            return true
+        end
+        return unit == "target" and target() ~= nil
+    end)
+    def("UnitCanAttack", "KNOWN", function(_, unit)
+        local t = unit == "target" and target()
+        return t ~= nil and t ~= false and t.hostile == true
+    end)
+    def("UnitPower", "KNOWN", function()
+        local power = world.power or {}
+        return maybeSecret(alwaysSecret(), power.rage or 0)
+    end)
+    def("UnitPowerMax", "KNOWN", function()
+        local power = world.power or {}
+        return power.rageMax or 100 -- rageMax was readable in run 2
+    end)
+    def("UnitHealth", "KNOWN", function(unit)
+        local health = world.targetHealth or {}
+        return maybeSecret(alwaysSecret(), unit == "target" and (health.cur or 100) or 100)
+    end)
+    def("UnitHealthMax", "KNOWN", function(unit)
+        local health = world.targetHealth or {}
+        return maybeSecret(alwaysSecret(), unit == "target" and (health.max or 100) or 100)
+    end)
+
+    def("C_Spell.IsSpellUsable", "KNOWN", function(spell)
+        local state = spellState(spell)
+        if not state then
+            return false, false
+        end
+        return state.usable == true, state.noPower == true
+    end)
+    def("C_Spell.IsSpellInRange", "KNOWN", function(spell, unit)
+        local state = spellState(spell)
+        if unit ~= "target" or not target() or not state or state.inRange == nil then
+            return nil
+        end
+        return state.inRange == true
+    end)
+    def("C_Spell.IsCurrentSpell", "KNOWN", function(spell)
+        if spell == 6603 then -- Auto Attack (V-23)
+            return world.autoAttack == true
+        end
+        return false
+    end)
+    -- Fields the run 2 sampler saw; anything else on the real table is ASSUMED absent here.
+    def("C_Spell.GetSpellCooldown", "KNOWN", function(spell)
+        local state = spellState(spell) or {}
+        local start, duration = state.cdStart or 0, state.cdDuration or 0
+        local active = duration > 0 and start + duration > sim.now
+        local hide = combatSecrets()
+        return {
+            startTime = maybeSecret(hide, start),
+            duration = maybeSecret(hide, duration),
+            modRate = maybeSecret(hide, 1),
+            isActive = active,
+            isEnabled = true,
+        }
+    end)
+    def("C_Spell.GetSpellName", "ASSUMED", function(spellID)
+        return spellName(spellID)
+    end)
+    def("C_Spell.GetSpellTexture", "ASSUMED", function(spellID)
+        return spellName(spellID) and (130000 + spellID % 100000) or nil
+    end)
+
+    local function auraData(unit, name)
+        local byUnit = world.auras and world.auras[unit]
+        local aura = byUnit and byUnit[name]
+        if not aura then
+            return nil
+        end
+        if aura.expirationTime and aura.expirationTime > 0 and aura.expirationTime <= sim.now then
+            return nil
+        end
+        return {
+            name = name,
+            applications = aura.applications or 0,
+            duration = aura.duration or 0,
+            expirationTime = aura.expirationTime or 0,
+            sourceUnit = aura.sourceUnit or "player",
+            isFromPlayerOrPlayerPet = (aura.sourceUnit or "player") == "player",
+            isHarmful = false,
+            spellId = world.spells and world.spells[name] or 0,
+            timeMod = 1,
+        }
+    end
+    def("C_UnitAuras.GetAuraDataBySpellName", "KNOWN", function(unit, name)
+        if combatSecrets() then
+            return nil -- run 2: nil in combat, indistinguishable from "absent"
+        end
+        return auraData(unit, name)
+    end)
+    def("C_UnitAuras.GetAuraDataByIndex", "KNOWN", function(unit, index)
+        if combatSecrets() then
+            error("Auras cannot be accessed when secret while tainted", 2) -- run 2
+        end
+        local byUnit = world.auras and world.auras[unit] or {}
+        local names = {}
+        for name in pairs(byUnit) do
+            names[#names + 1] = name
+        end
+        table.sort(names)
+        return names[index] and auraData(unit, names[index]) or nil
+    end)
+
+    def("GetShapeshiftForm", "KNOWN", function()
+        return world.stance and world.stance.index or 0
+    end)
+    def("GetShapeshiftFormInfo", "KNOWN", function(index) -- run 2: icon, active, castable, spellID
+        local stance = world.stance
+        if not stance or stance.index ~= index then
+            return nil
+        end
+        return 132349, true, true, stance.spellID
+    end)
+
+    def("PlaySound", "ASSUMED", function(soundKitID)
+        sim.sounds = sim.sounds or {}
+        sim.sounds[#sim.sounds + 1] = soundKitID
+        return true
+    end)
+    G.SOUNDKIT = G.SOUNDKIT or { RAID_WARNING = 8959 } -- ASSUMED value
 end

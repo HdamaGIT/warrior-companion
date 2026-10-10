@@ -218,5 +218,112 @@ class WarriorWorkshopTests(unittest.TestCase):
         self.assertIsInstance(self.client.assumed_apis_used(), list)
 
 
+def visible_texts(client) -> list[str]:
+    """Plain text of every visible FontString, in creation order."""
+    return [sim.strip_codes(f["text"]) for f in client.frames()
+            if f["type"] == "FontString" and f["visible"] and f.get("text")]
+
+
+class WarriorWorkshopCombatTests(unittest.TestCase):
+    """M5 combat companion and HUD against the run 2 restriction and secret-value fakes (scenario "combat":
+    level 20, hostile target in range, Battle Shout not up, auto-attack off)."""
+
+    def setUp(self):
+        self.client = sim.Client(scenario="combat")
+        self.addCleanup(self.client.close)
+        self.client.login()
+
+    def now(self) -> float:
+        return self.client.eval("GetTime()")
+
+    def test_loads_without_errors_or_unavailable_apis(self):
+        self.assertEqual(self.client.errors, [])
+        self.assertFalse([line for line in self.client.chat if "API unavailable" in line], self.client.chat)
+
+    def test_out_of_combat_shows_charge_and_missing_battle_shout(self):
+        texts = visible_texts(self.client)
+        self.assertIn("Charge", texts)
+        self.assertIn("Battle Shout missing", texts)
+
+    def test_secret_values_in_combat_raise_no_errors(self):
+        self.client.set_combat(True)
+        self.assertTrue(self.client.eval("C_Secrets.ShouldAurasBeSecret()"))
+        self.assertTrue(self.client.eval("issecretvalue(C_Spell.GetSpellCooldown(900100).startTime)"))
+        self.client.fire("PLAYER_LEAVE_COMBAT")
+        self.client.advance(2)
+        texts = visible_texts(self.client)
+        self.assertIn("Auto-attack off", texts)
+        self.assertNotIn("Charge", texts)  # out-of-combat badge
+        self.assertIn("Battle Shout missing", texts)  # known absent before the pull
+        self.client.set_combat(False)
+        self.assertEqual(self.client.errors, [])
+
+    def test_battle_shout_counts_down_from_the_tracked_timer_while_auras_are_secret(self):
+        self.client.set("auras.player.Battle Shout",
+                        {"duration": 180, "expirationTime": self.now() + 180, "sourceUnit": "player"})
+        self.client.fire("UNIT_AURA", "player")
+        self.client.advance(0.2)  # past the rule's 0.1s throttle
+        self.assertNotIn("Battle Shout missing", visible_texts(self.client))
+        self.client.set_combat(True)
+        self.client.advance(172)
+        self.assertIn("Battle Shout 8s", visible_texts(self.client))
+        self.client.advance(9)
+        self.assertIn("Battle Shout missing", visible_texts(self.client))
+        self.assertEqual(self.client.errors, [])
+
+    def test_combat_restriction_alone_does_not_suspend(self):
+        self.client.set_combat(True)
+        self.assertNotIn("Suspended", visible_texts(self.client))
+
+    def test_encounter_restriction_suspends_and_clears_alerts(self):
+        self.client.set_combat(True)
+        self.client.set("restrictions.1", 2)
+        self.client.fire("ADDON_RESTRICTION_STATE_CHANGED", 1, 1)
+        self.client.advance(1)
+        texts = visible_texts(self.client)
+        self.assertIn("Suspended", texts)
+        self.assertNotIn("Battle Shout missing", texts)
+        self.client.set("restrictions.1", 0)
+        self.client.fire("ADDON_RESTRICTION_STATE_CHANGED", 1, 0)
+        self.assertNotIn("Suspended", visible_texts(self.client))
+        self.assertEqual(self.client.errors, [])
+
+    def test_hud_off_and_on(self):
+        self.client.slash("/ww hud off")
+        self.assertEqual(visible_texts(self.client), [])
+        self.client.slash("/ww hud on")
+        self.assertIn("Charge", visible_texts(self.client))
+        self.client.reload()
+        self.assertIn("Charge", visible_texts(self.client))
+
+    def test_test_mode_shows_every_display_and_the_snapshot_has_no_layout_warnings(self):
+        self.client.slash("/ww test")
+        texts = visible_texts(self.client)
+        for expected in ("Execute", "Overpower", "Battle Shout 8s", "Suspended", "Auto-attack off", "Charge"):
+            self.assertIn(expected, texts)
+        with tempfile.TemporaryDirectory() as tmp:
+            _, warnings = self.client.snapshot(Path(tmp) / "hud.html")
+        self.assertEqual(warnings, [])
+        self.client.slash("/ww test")
+        self.assertNotIn("Execute", visible_texts(self.client))
+
+    def test_test_mode_and_unlock_are_refused_in_combat(self):
+        self.client.set_combat(True)
+        self.client.clear_chat()
+        self.client.slash("/ww test")
+        self.client.slash("/ww unlock")
+        self.assertEqual(self.client.chat, ["Warrior Workshop: Not in combat: try again when combat ends."] * 2)
+
+    def test_hud_frames_are_anchored_to_uiparent_and_add_no_globals(self):
+        frames = {f["id"]: f for f in self.client.frames()}
+        ui_parent = next(f["id"] for f in frames.values() if f["name"] == "UIParent")
+        roots = [f for f in frames.values()
+                 if f.get("parent") == ui_parent and f["type"] == "Frame" and f.get("points")]
+        self.assertEqual(len(roots), 3, roots)  # alert strip, big alert, badges
+        for frame in roots:
+            self.assertIsNone(frame.get("name"))
+            self.assertEqual(frame["points"][0].get("relativeTo"), ui_parent)
+
+
 if __name__ == "__main__":
     unittest.main()

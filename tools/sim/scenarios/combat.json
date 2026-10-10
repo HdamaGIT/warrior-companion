@@ -1,0 +1,22 @@
+{
+  "player": { "name": "Testwarrior", "realm": "Testrealm", "level": 20 },
+  "spells": {
+    "Battle Shout": 906673,
+    "Battle Stance": 902457,
+    "Charge": 900100,
+    "Heroic Strike": 900078,
+    "Overpower": 907384,
+    "Execute": 905308
+  },
+  "stance": { "index": 1, "spellID": 902457 },
+  "target": { "exists": true, "hostile": true },
+  "autoAttack": false,
+  "spellState": {
+    "Charge": { "usable": true, "inRange": true },
+    "Heroic Strike": { "usable": true, "inRange": true },
+    "Overpower": { "usable": false },
+    "Execute": { "usable": false }
+  },
+  "auras": { "player": {} },
+  "power": { "rage": 0, "rageMax": 100 }
+}
