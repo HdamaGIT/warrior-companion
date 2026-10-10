@@ -77,6 +77,13 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(hud["points"][0]["point"], "CENTER")
         self.assertEqual((hud["width"], hud["height"]), (240, 80))
 
+    def test_get_point_round_trips_set_point(self):
+        point = self.client.eval("(function() return {UiAddonHUD:GetPoint(1)} end)()")
+        self.assertEqual(point[0], "CENTER")
+        self.assertEqual(point[2:], ["CENTER", 0, -200])
+        self.assertEqual(self.client.eval("UiAddonHUD:GetPoint(1) and select(2, UiAddonHUD:GetPoint(1)) == UIParent"), True)
+        self.assertIsNone(self.client.eval("UiAddonHUD:GetPoint(5)"))
+
     def test_snapshot_draws_visible_text_and_flags_templates(self):
         path, warnings = self.client.snapshot(self.out / "hud.html")
         page = path.read_text(encoding="utf-8")

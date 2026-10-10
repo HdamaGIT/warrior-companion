@@ -246,6 +246,14 @@ return function(world)
         frameMethods.SetPoint(self, "BOTTOMRIGHT", relativeTo or false, "BOTTOMRIGHT", 0, 0)
     end
     function frameMethods.GetNumPoints(self) return #self._points end
+    --- Returns point, relativeTo, relativePoint, x, y for anchor `index` (default 1); relativeTo falls back to the parent.
+    function frameMethods.GetPoint(self, index)
+        local p = self._points[index or 1]
+        if not p then
+            return nil
+        end
+        return p.point, p.relativeTo or self._parent, p.relativePoint, p.x, p.y
+    end
     function frameMethods.SetSize(self, w, h) self._width, self._height = w, h end
     function frameMethods.SetWidth(self, w) self._width = w end
     function frameMethods.SetHeight(self, h) self._height = h end
