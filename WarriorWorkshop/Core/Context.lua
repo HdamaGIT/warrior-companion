@@ -1,9 +1,9 @@
 local addonName, ns = ...
 
 -- Play context (SPEC_V2 §5.2): zone, restricted, inCombat, dead and group, published as WW_CONTEXT_CHANGED.
--- M2 stub per SPEC_V2 §15: event wiring plus a pure Compute(). M5 adds a direct restriction signal if V-21 finds
--- one. Restricted = encounter, Mythic+ or a direct signal only; a secret value seen by an accessor does NOT
--- suspend everything, it is only counted for diagnostics (D-033).
+-- Restricted = encounter, Mythic+ or the direct signal from C_RestrictedActions: restriction types Encounter,
+-- ChallengeMode or PvPMatch Active (D-045). Type 0 (Combat) is active in every open-world fight and suspends nothing.
+-- A secret value seen by an accessor does NOT suspend anything, it is only counted for diagnostics (D-033, D-049).
 --
 -- Event arguments are never read: state changes come from event names and Adapter queries only.
 local Adapter = ns.Adapter
@@ -22,7 +22,7 @@ Context.flags = {
     dead = false,
     encounter = false,    -- ENCOUNTER_START seen without ENCOUNTER_END
     challengeMode = false, -- Mythic+ active
-    directRestriction = false, -- reserved for a V-21 signal (M5)
+    directRestriction = false, -- C_RestrictedActions: Encounter, ChallengeMode or PvPMatch Active (D-045)
 }
 Context.secretHits = 0
 
@@ -69,6 +69,7 @@ function Context:Publish()
         return
     end
     self.state = newState
+    Adapter.SetSecretFallback(newState.restricted) -- values count as secret while restricted if no checker (D-036)
     Log.Debug(string.format("context: %s, %s, restricted=%s, combat=%s, dead=%s", newState.zone, newState.group,
         tostring(newState.restricted), tostring(newState.inCombat), tostring(newState.dead)))
     Events:Fire("WW_CONTEXT_CHANGED", Util.DeepCopy(newState), oldState and Util.DeepCopy(oldState) or nil)
@@ -134,10 +135,23 @@ function Context:OnChallengeModeCompleted()
     self:Publish()
 end
 
+-- Reads the direct restriction signal (D-045). Missing API leaves the flag false.
+function Context:ReadRestrictions()
+    local encounter, challengeMode, pvpMatch = Adapter.GetRestrictionFlags()
+    self.flags.directRestriction = (encounter or challengeMode or pvpMatch) and true or false
+end
+
+-- ADDON_RESTRICTION_STATE_CHANGED: its arguments are not read (run 2 saw (0, 1) and (0, 0) for Combat); ask instead.
+function Context:OnRestrictionChanged()
+    self:ReadRestrictions()
+    self:Publish()
+end
+
 -- After a zone change, re-ask the encounter and Mythic+ state too: an END event may have been missed.
 function Context:OnZoneChanged()
     self.flags.encounter = Adapter.IsEncounterInProgress() == true
     self.flags.challengeMode = Adapter.IsChallengeModeActive() == true
+    self:ReadRestrictions()
     self:Refresh()
 end
 
@@ -148,6 +162,7 @@ function Context:OnEnable()
     self.flags.inCombat = Adapter.InCombat() == true
     self.flags.encounter = Adapter.IsEncounterInProgress() == true
     self.flags.challengeMode = Adapter.IsChallengeModeActive() == true
+    self:ReadRestrictions()
     Events:On("PLAYER_REGEN_DISABLED", self, "OnRegenDisabled")
     Events:On("PLAYER_REGEN_ENABLED", self, "OnRegenEnabled")
     Events:On("PLAYER_DEAD", self, "OnPlayerDead")
@@ -160,5 +175,6 @@ function Context:OnEnable()
     Events:On("PLAYER_ENTERING_WORLD", self, "OnZoneChanged")
     Events:On("ZONE_CHANGED_NEW_AREA", self, "OnZoneChanged")
     Events:On("GROUP_ROSTER_UPDATE", self, "Refresh")
+    Events:On("ADDON_RESTRICTION_STATE_CHANGED", self, "OnRestrictionChanged")
     self:Refresh()
 end

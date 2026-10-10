@@ -1,4 +1,5 @@
 local H = dofile("tests/helpers/load_addon.lua")
+local Replay = dofile("tests/helpers/replay.lua")
 
 local ADDON = "WarriorWorkshop"
 
@@ -135,6 +136,38 @@ describe("context", function()
             Context:NoteSecret()
             Context:NoteSecret()
             assert.are.equal(2, Context.secretHits)
+            assert.is_false(Context:IsRestricted())
+        end)
+
+        it("does not suspend on the Combat restriction (type 0) that every open-world fight activates (D-045)",
+            function()
+                local stream = { events = {
+                    { t = 0, event = "PLAYER_REGEN_DISABLED", data = { inCombat = true } },
+                    { t = 0, event = "ADDON_RESTRICTION_STATE_CHANGED", args = { 0, 1 } },
+                } }
+                boot()
+                Replay.run(mock, stream)
+                assert.is_true(Context:Get().inCombat)
+                assert.is_false(Context:IsRestricted())
+            end)
+
+        it("is restricted while the Encounter restriction (type 1) is Active, and tells the Adapter", function()
+            boot()
+            mock.data.restriction = { encounter = true }
+            mock.frame:Fire("ADDON_RESTRICTION_STATE_CHANGED", 1, 1)
+            assert.is_true(Context:IsRestricted())
+            assert.is_true(mock.secretFallback)
+            mock.data.restriction = {}
+            mock.frame:Fire("ADDON_RESTRICTION_STATE_CHANGED", 1, 0)
+            assert.is_false(Context:IsRestricted())
+            assert.is_false(mock.secretFallback)
+        end)
+
+        it("seeds the restriction at login and re-reads it on zone change", function()
+            boot({ restriction = { challengeMode = true } })
+            assert.is_true(Context:IsRestricted())
+            mock.data.restriction = {}
+            mock.frame:Fire("ZONE_CHANGED_NEW_AREA")
             assert.is_false(Context:IsRestricted())
         end)
 
