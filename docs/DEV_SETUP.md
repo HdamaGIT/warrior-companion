@@ -117,11 +117,13 @@ In Git Bash, set `MSYS_NO_PATHCONV=1` first, otherwise `"/ww"` is rewritten into
 # the demo HUD fixture, out of combat and in combat
 python tools/sim/sim.py run --open --addons-root tools/sim/tests/fixtures --addon UiAddon "!snapshot hud-idle" "!combat on" "!snapshot hud-combat"
 # the real add-on, once it has UI (M5 onwards)
-python tools/sim/sim.py run --open "/ww hud" "!snapshot hud"
+python tools/sim/sim.py run --scenario combat --open "/ww test" "!snapshot hud"
 ```
 
 The preview resolves `SetPoint`/`SetAllPoints` anchors and sizes the way the client does, and draws colour textures, status bars, backdrop colours, text (including `|cff…|r` colour codes) and shown or hidden state. Tick **show hidden frames** to see frames that exist but are hidden.
 
 Layout warnings flag frames that are visible but have no anchor (the client would not draw them), frames entirely off-screen, zero-size frames, anchor loops, and frames built from a Blizzard template. Templates, art (`SetTexture` file paths, drawn hatched), fonts and scaling are **not** reproduced, so the preview checks placement and behaviour, not the final look. Sign-off is still the in-game checklist.
 
-Not simulated: combat secret values, taint, protected-function rules, real skill-up randomness, the auction house, Blizzard art, fonts and templates.
+Combat secrets (M5): the `combat` scenario follows beta run 2. `!combat on` makes restriction type 0 Active, which makes auras and cooldown times secret; rage and health are always secret; secret values are userdata that raise on arithmetic, ordering, concatenation and indexing. `python tools/sim/sim.py run --scenario combat --open "/ww test" "!snapshot hud"` previews the HUD. The simulator cannot catch `secret == x`, `t[secret]` or `if secret then` (see `tools/sim/lua/api.lua`).
+
+Not simulated: taint, protected-function rules, real skill-up randomness, the auction house, Blizzard art, fonts and templates.
